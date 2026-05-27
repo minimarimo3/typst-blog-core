@@ -1,5 +1,5 @@
 #import "/site.typ": site
-#import "shared.typ": calver-display, calver-iso, calver-key, main-font, heading-font, math-font, base-path
+#import "shared.typ": calver-display, calver-iso, calver-key, export-target, main-font, heading-font, math-font, base-path
 #import "i18n.typ": i18n
 #import "/typst/generated/posts.typ": post-data
 #import "../components/head.typ": common-head
@@ -130,7 +130,7 @@
   show figure.where(kind: raw): set figure(supplement: i18n.code)
   set quote(block: true)
 
-  if target() == "paged" {
+  if export-target() == "paged" {
     set text(font: main-font, size: 12pt)
     show heading: set text(font: heading-font)
     if math-font != none {

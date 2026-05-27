@@ -1,5 +1,7 @@
+#import "../core/shared.typ": export-target
+
 #let _alert-box(kind, title, icon, body) = context {
-  if target() == "paged" {
+  if export-target() == "paged" {
     return icon + " " + title + ": " + body
   }
 
