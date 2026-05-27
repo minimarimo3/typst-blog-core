@@ -179,21 +179,35 @@
       )
     })
     html.body({
-      html.div(id: "copy-toast", i18n.copied)
+      html.elem(
+        "div",
+        attrs: (
+          id: "copy-toast",
+          role: "status",
+          "aria-live": "polite",
+          "aria-atomic": "true",
+          "data-copied-label": i18n.copied,
+          "data-pagefind-ignore": "all",
+          "data-nosnippet": "",
+        ),
+      )
       html.div(class: "site-container", {
         html.main(class: "main-content", {
-          html.div(class: "mobile-search", {
+          html.elem("div", attrs: (class: "mobile-search", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
             widget-search()
           })
 
-          html.elem("article", attrs: ("data-pagefind-body": "", "aria-labelledby": "article-title"), {
+          html.elem("nav", attrs: (class: "back-home-nav", "aria-label": i18n.back_to_top, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
+            html.elem(
+              "a",
+              attrs: (class: "back-home-btn", href: base-path + "/", "data-pagefind-ignore": "all", "data-nosnippet": ""),
+              i18n.back_home,
+            )
+          })
+
+          html.elem("article", attrs: ("data-pagefind-body": "", "aria-labelledby": "article-title", itemscope: "", itemtype: "https://schema.org/BlogPosting"), {
             html.header(class: "article-header", {
-              html.elem(
-                "a",
-                attrs: (class: "back-home-btn", href: base-path + "/", "data-pagefind-ignore": "all"),
-                i18n.back_home,
-              )
-              html.elem("h1", attrs: (id: "article-title", class: "article-title"), title)
+              html.elem("h1", attrs: (id: "article-title", class: "article-title", itemprop: "headline"), title)
               html.div(class: "article-meta", {
                 html.div(class: "meta-dates", {
                   if create != none {
@@ -220,7 +234,7 @@
                 if github-repo != none and github-repo != "" {
                   let source-path = post-data.at(slug, default: (:)).at("source_path", default: none)
                   if source-path != none {
-                    html.elem("div", attrs: (class: "meta-edit-history", "data-pagefind-ignore": "all"), {
+                    html.elem("div", attrs: (class: "meta-edit-history", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
                       html.elem(
                         "a",
                         attrs: (
@@ -237,7 +251,7 @@
               })
             })
 
-            html.elem("nav", attrs: (class: "mobile-toc", "aria-label": i18n.toc, "data-pagefind-ignore": "all"), {
+            html.elem("nav", attrs: (class: "mobile-toc", "aria-label": i18n.toc, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
               html.details({
                 html.summary(i18n.toc_open)
                 outline(title: none)
@@ -259,11 +273,11 @@
               )
             }
 
-            html.div(class: "article-body", body)
+            html.elem("div", attrs: (class: "article-body", itemprop: "articleBody"), body)
           })
 
           if share-enabled or feedback-enabled {
-            html.elem("section", attrs: (class: "share-feedback-section", "aria-label": i18n.article_actions, "data-pagefind-ignore": "all"), {
+            html.elem("aside", attrs: (class: "share-feedback-section", "aria-label": i18n.article_actions, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
               html.hr(class: "section-divider")
               if share-enabled {
                 html.elem("section", attrs: (class: "share-area", "aria-labelledby": "share-heading"), {
@@ -306,7 +320,7 @@
           if other-posts.len() > 0 {
             html.hr(class: "section-divider")
 
-            html.elem("aside", attrs: (class: "related-posts", "aria-labelledby": "related-posts-heading", "data-pagefind-ignore": "all"), {
+            html.elem("aside", attrs: (class: "related-posts", "aria-labelledby": "related-posts-heading", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
               html.elem("h2", attrs: (id: "related-posts-heading", class: "section-title"), i18n.other_articles)
               let seed-src = slug + title
               let seed = int(seed-src.clusters().map(str.to-unicode).map(str).join().slice(0, calc.min(14, seed-src.clusters().len())))
@@ -348,7 +362,7 @@
             let next-post = if current-idx > 0 { sorted-posts.at(current-idx - 1) } else { none }
             if prev-post != none or next-post != none {
               html.hr(class: "section-divider")
-              html.elem("nav", attrs: (class: "post-nav", "aria-label": i18n.adjacent_articles, "data-pagefind-ignore": "all"), {
+              html.elem("nav", attrs: (class: "post-nav", "aria-label": i18n.adjacent_articles, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
                 if prev-post != none {
                   html.a(class: "post-nav-link post-nav-prev", href: base-path + "/" + prev-post.slug + "/", {
                     html.span(class: "post-nav-label", i18n.prev_article)
@@ -366,10 +380,10 @@
           }
         })
 
-        html.aside(class: "sidebar", {
+        html.elem("aside", attrs: (class: "sidebar", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
           html.div(class: "sidebar-inner", {
             widget-search(extra-class: "desktop-search")
-            html.elem("nav", attrs: (class: "sidebar-widget toc-widget", "aria-label": i18n.toc, "data-pagefind-ignore": "all"), {
+            html.elem("nav", attrs: (class: "sidebar-widget toc-widget", "aria-label": i18n.toc, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
               html.h3(class: "widget-title", i18n.toc)
               outline(title: none)
             })

@@ -24,6 +24,8 @@ function openFeedback(url, entryId) {
   window.open(fullUrl, "_blank");
 }
 
+let copyToastTimer;
+
 function copyInfo() {
   const title = document.title;
   const desc = document.querySelector(".abstract-content")?.innerText.trim()
@@ -35,8 +37,17 @@ function copyInfo() {
   navigator.clipboard.writeText(textToCopy).then(() => {
     const toast = document.getElementById("copy-toast");
     if (!toast) return;
+    toast.textContent = toast.dataset.copiedLabel || "Copied!";
     toast.classList.add("show");
-    setTimeout(() => toast.classList.remove("show"), 3000);
+    window.clearTimeout(copyToastTimer);
+    copyToastTimer = window.setTimeout(() => {
+      toast.classList.remove("show");
+      copyToastTimer = window.setTimeout(() => {
+        if (!toast.classList.contains("show")) {
+          toast.textContent = "";
+        }
+      }, 300);
+    }, 3000);
   });
 }
 
@@ -250,6 +261,8 @@ document.addEventListener("DOMContentLoaded", () => {
   preview.setAttribute("aria-modal", "false");
   preview.setAttribute("aria-labelledby", "reference-preview-title");
   preview.setAttribute("aria-live", "polite");
+  preview.setAttribute("data-pagefind-ignore", "all");
+  preview.setAttribute("data-nosnippet", "");
 
   const header = document.createElement("div");
   header.className = "reference-preview-header";

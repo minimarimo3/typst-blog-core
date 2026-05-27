@@ -12,7 +12,7 @@
   let socials = author.socials
   html.elem(
     "div",
-    attrs: (class: "sidebar-widget author-widget", "data-pagefind-ignore": "all"),
+    attrs: (class: "sidebar-widget author-widget", "data-pagefind-ignore": "all", "data-nosnippet": ""),
     {
       html.h3(class: "widget-title", i18n.author)
       html.strong(author.name)
@@ -52,6 +52,7 @@
       role: "search",
       "aria-label": i18n.search,
       "data-pagefind-ignore": "all",
+      "data-nosnippet": "",
       "data-search-loading": i18n.search_loading,
       "data-search-empty": i18n.search_no_results,
       "data-search-error": i18n.search_error,

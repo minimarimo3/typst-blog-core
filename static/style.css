@@ -898,6 +898,14 @@ a[role="doc-biblioref"].biblioref-is-active {
   transition: all 0.2s ease;
 }
 
+.back-home-nav {
+  margin-bottom: 1rem;
+}
+
+.back-home-nav .back-home-btn {
+  margin-bottom: 0;
+}
+
 .back-home-btn:hover {
   color: var(--accent-color);
   border-color: var(--accent-color);
