@@ -166,6 +166,49 @@
 
   let share-enabled = site.share.x or site.share.misskey or site.share.copy
   let feedback-enabled = site.feedback.google_form_url != none and site.feedback.google_form_url != ""
+  let other-posts = post-data
+    .pairs()
+    .filter(p => p.first() != slug)
+  let related-picks = if other-posts.len() > 0 {
+    let seed-src = slug + title
+    let seed = int(seed-src.clusters().map(str.to-unicode).map(str).join().slice(0, calc.min(14, seed-src.clusters().len())))
+    let rng = gen-rng(seed)
+    let (_, indices) = shuffle-f(rng, range(other-posts.len()))
+    indices.slice(0, calc.min(3, indices.len())).map(i => other-posts.at(i))
+  } else {
+    ()
+  }
+  let sorted-posts = post-data
+    .pairs()
+    .map(pair => {
+      let (key, val) = pair
+      val + (slug: key)
+    })
+    .sorted(key: p => calver-key(p.create))
+    .rev()
+  let current-idx = sorted-posts.position(p => p.slug == slug)
+  let prev-post = if current-idx == none {
+    none
+  } else if current-idx + 1 < sorted-posts.len() {
+    sorted-posts.at(current-idx + 1)
+  } else {
+    none
+  }
+  let next-post = if current-idx == none {
+    none
+  } else if current-idx > 0 {
+    sorted-posts.at(current-idx - 1)
+  } else {
+    none
+  }
+  let related-enabled = related-picks.len() > 0 or prev-post != none or next-post != none
+
+  show bibliography: it => {
+    html.elem("section", attrs: (class: "article-references", "aria-labelledby": "references"), {
+      show heading: h => html.elem("h2", attrs: (id: "references", class: "references-title"), h.body)
+      it
+    })
+  }
 
   html.html(lang: site.language, {
     html.head({
@@ -179,32 +222,18 @@
       )
     })
     html.body({
-      html.elem(
-        "div",
-        attrs: (
-          id: "copy-toast",
-          role: "status",
-          "aria-live": "polite",
-          "aria-atomic": "true",
-          "data-copied-label": i18n.copied,
-          "data-pagefind-ignore": "all",
-          "data-nosnippet": "",
-        ),
-      )
-      html.div(class: "site-container", {
+      html.elem("header", attrs: (class: "site-header", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
+        html.div(class: "site-header-inner", {
+          html.a(class: "site-brand", href: base-path + "/", site.title)
+          html.elem("nav", attrs: (class: "site-nav", "aria-label": i18n.global_nav), {
+            html.a(class: "site-nav-link", href: base-path + "/", i18n.home)
+            html.a(class: "site-nav-link", href: base-path + "/feed.xml", i18n.feed)
+          })
+        })
+      })
+
+      html.div(class: "site-container article-layout", {
         html.main(class: "main-content", {
-          html.elem("div", attrs: (class: "mobile-search", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
-            widget-search()
-          })
-
-          html.elem("nav", attrs: (class: "back-home-nav", "aria-label": i18n.back_to_top, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
-            html.elem(
-              "a",
-              attrs: (class: "back-home-btn", href: base-path + "/", "data-pagefind-ignore": "all", "data-nosnippet": ""),
-              i18n.back_home,
-            )
-          })
-
           html.elem("article", attrs: ("data-pagefind-body": "", "aria-labelledby": "article-title", itemscope: "", itemtype: "https://schema.org/BlogPosting"), {
             html.header(class: "article-header", {
               html.elem("h1", attrs: (id: "article-title", class: "article-title", itemprop: "headline"), title)
@@ -273,63 +302,55 @@
               )
             }
 
-            html.elem("div", attrs: (class: "article-body", itemprop: "articleBody"), body)
+            html.elem("section", attrs: (class: "article-body", itemprop: "articleBody", "aria-label": i18n.article_body), body)
           })
+        })
 
-          if share-enabled or feedback-enabled {
-            html.elem("aside", attrs: (class: "share-feedback-section", "aria-label": i18n.article_actions, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
-              html.hr(class: "section-divider")
-              if share-enabled {
-                html.elem("section", attrs: (class: "share-area", "aria-labelledby": "share-heading"), {
-                  html.elem("h3", attrs: (id: "share-heading"), i18n.share)
-                  html.div(class: "share-buttons", {
-                    if site.share.x {
-                      html.elem("button", attrs: (class: "share-btn btn-x", onclick: "shareX()"), i18n.post_on_x)
-                    }
-                    if site.share.misskey {
-                      html.elem("button", attrs: (class: "share-btn btn-misskey", onclick: "shareMisskey()"), i18n.note_on_misskey)
-                    }
-                    if site.share.copy {
-                      html.elem("button", attrs: (class: "share-btn btn-copy", onclick: "copyInfo()"), i18n.copy_info)
-                    }
-                  })
-                })
-              }
-
-              if feedback-enabled {
-                let feedback-entry-id = if site.feedback.entry_id == none { "" } else { site.feedback.entry_id }
-                html.elem("section", attrs: (class: "feedback-area", "aria-labelledby": "feedback-heading"), {
-                  html.elem("h3", attrs: (id: "feedback-heading"), i18n.feedback_title)
-                  html.p(i18n.feedback_body)
-                  html.elem(
-                    "button",
-                    attrs: (
-                      class: "feedback-link",
-                      onclick: "openFeedback('" + site.feedback.google_form_url + "', '" + feedback-entry-id + "')",
-                    ),
-                    i18n.feedback_send,
-                  )
-                })
-              }
-            })
-          }
-
-          let other-posts = post-data
-            .pairs()
-            .filter(p => p.first() != slug)
-          if other-posts.len() > 0 {
+        if share-enabled or feedback-enabled {
+          html.elem("aside", attrs: (class: "article-actions share-feedback-section", "aria-label": i18n.article_actions, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
             html.hr(class: "section-divider")
+            if share-enabled {
+              html.elem("section", attrs: (class: "share-area", "aria-labelledby": "share-heading"), {
+                html.elem("h3", attrs: (id: "share-heading"), i18n.share)
+                html.div(class: "share-buttons", {
+                  if site.share.x {
+                    html.elem("button", attrs: (class: "share-btn btn-x", onclick: "shareX()"), i18n.post_on_x)
+                  }
+                  if site.share.misskey {
+                    html.elem("button", attrs: (class: "share-btn btn-misskey", onclick: "shareMisskey()"), i18n.note_on_misskey)
+                  }
+                  if site.share.copy {
+                    html.elem("button", attrs: (class: "share-btn btn-copy", onclick: "copyInfo()"), i18n.copy_info)
+                  }
+                })
+              })
+            }
 
-            html.elem("aside", attrs: (class: "related-posts", "aria-labelledby": "related-posts-heading", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
+            if feedback-enabled {
+              let feedback-entry-id = if site.feedback.entry_id == none { "" } else { site.feedback.entry_id }
+              html.elem("section", attrs: (class: "feedback-area", "aria-labelledby": "feedback-heading"), {
+                html.elem("h3", attrs: (id: "feedback-heading"), i18n.feedback_title)
+                html.p(i18n.feedback_body)
+                html.elem(
+                  "button",
+                  attrs: (
+                    class: "feedback-link",
+                    onclick: "openFeedback('" + site.feedback.google_form_url + "', '" + feedback-entry-id + "')",
+                  ),
+                  i18n.feedback_send,
+                )
+              })
+            }
+          })
+        }
+
+        if related-enabled {
+          html.elem("aside", attrs: (class: "related-posts", "aria-labelledby": "related-posts-heading", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
+            html.hr(class: "section-divider")
+            if related-picks.len() > 0 {
               html.elem("h2", attrs: (id: "related-posts-heading", class: "section-title"), i18n.other_articles)
-              let seed-src = slug + title
-              let seed = int(seed-src.clusters().map(str.to-unicode).map(str).join().slice(0, calc.min(14, seed-src.clusters().len())))
-              let rng = gen-rng(seed)
-              let (_, indices) = shuffle-f(rng, range(other-posts.len()))
-              let picks = indices.slice(0, calc.min(3, indices.len())).map(i => other-posts.at(i))
-
               html.div(class: "card-grid", {
-                for pair in picks {
+                for pair in related-picks {
                   let (other-slug, post) = pair
                   let url = base-path + "/" + other-slug + "/"
                   html.a(class: "post-card", href: url, {
@@ -345,23 +366,11 @@
                   })
                 }
               })
-            })
-          }
+            } else {
+              html.elem("h2", attrs: (id: "related-posts-heading", class: "section-title"), i18n.adjacent_articles)
+            }
 
-          let sorted-posts = post-data
-            .pairs()
-            .map(pair => {
-              let (key, val) = pair
-              val + (slug: key)
-            })
-            .sorted(key: p => calver-key(p.create))
-            .rev()
-          let current-idx = sorted-posts.position(p => p.slug == slug)
-          if current-idx != none {
-            let prev-post = if current-idx + 1 < sorted-posts.len() { sorted-posts.at(current-idx + 1) } else { none }
-            let next-post = if current-idx > 0 { sorted-posts.at(current-idx - 1) } else { none }
             if prev-post != none or next-post != none {
-              html.hr(class: "section-divider")
               html.elem("nav", attrs: (class: "post-nav", "aria-label": i18n.adjacent_articles, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
                 if prev-post != none {
                   html.a(class: "post-nav-link post-nav-prev", href: base-path + "/" + prev-post.slug + "/", {
@@ -377,12 +386,12 @@
                 }
               })
             }
-          }
-        })
+          })
+        }
 
-        html.elem("aside", attrs: (class: "sidebar", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
+        html.elem("aside", attrs: (class: "sidebar", "aria-label": i18n.sidebar, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
           html.div(class: "sidebar-inner", {
-            widget-search(extra-class: "desktop-search")
+            widget-search()
             html.elem("nav", attrs: (class: "sidebar-widget toc-widget", "aria-label": i18n.toc, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
               html.h3(class: "widget-title", i18n.toc)
               outline(title: none)
@@ -390,6 +399,24 @@
             widget-author()
           })
         })
+      })
+
+      html.elem("footer", attrs: (class: "site-footer", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
+        html.div(class: "site-footer-inner", {
+          html.span(site.title)
+        })
+        html.elem(
+          "div",
+          attrs: (
+            id: "copy-toast",
+            role: "status",
+            "aria-live": "polite",
+            "aria-atomic": "true",
+            "data-copied-label": i18n.copied,
+            "data-pagefind-ignore": "all",
+            "data-nosnippet": "",
+          ),
+        )
       })
     })
   })
