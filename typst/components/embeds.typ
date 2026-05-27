@@ -1,4 +1,10 @@
-#let raw_html(content) = {
+#import "../core/shared.typ": export-target
+
+#let raw_html(content) = context {
+  if export-target() == "paged" {
+    return []
+  }
+
   html.elem("div", attrs: (
     class: "raw-html-embed",
     "data-html": content.text,
@@ -27,7 +33,7 @@
 
   let embed-url = "https://www.youtube.com/embed/" + clean-id + query-string
 
-  if target() == "paged" {
+  if export-target() == "paged" {
     return [
       #align(center)[
         #rect(inset: 10pt, stroke: luma(150), radius: 4pt)[

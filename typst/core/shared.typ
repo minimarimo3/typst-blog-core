@@ -64,6 +64,7 @@
 }
 
 #import "/site.typ": site
+#let export-target = dictionary(std).at("target", default: () => "paged")
 #let main-font    = site.fonts.main.pdf
 #let code-font    = site.fonts.code.pdf
 #let heading-font = site.fonts.at("heading", default: site.fonts.main).at("pdf", default: site.fonts.main.pdf)

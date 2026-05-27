@@ -1,5 +1,5 @@
 #import "/site.typ": site
-#import "shared.typ": calver-display, calver-iso, calver-key, main-font, heading-font, base-path
+#import "shared.typ": calver-display, calver-iso, calver-key, export-target, main-font, heading-font, base-path
 #import "../components/head.typ": common-head
 #import "../components/widgets.typ": widget-author, widget-about, widget-search
 
@@ -18,7 +18,7 @@
   set document(title: page-title, author: document-authors)
   set text(lang: site.language)
 
-  if target() == "paged" {
+  if export-target() == "paged" {
     set text(font: main-font, size: 12pt, lang: site.language)
     show heading: set text(font: heading-font)
     body
