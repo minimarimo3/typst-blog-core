@@ -1,0 +1,6 @@
+public/
+__pycache__/
+*.pyc
+*.pdf
+_tag_build_*.typ
+_tags_index_build.typ
