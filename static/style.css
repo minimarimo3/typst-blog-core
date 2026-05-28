@@ -258,6 +258,24 @@ blockquote {
   text-align: right;
 }
 
+.article-body,
+.article-abstract {
+  text-align: start;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-break: normal;
+}
+
+.article-body a,
+.article-body code {
+  overflow-wrap: anywhere;
+}
+
+.article-title {
+  letter-spacing: normal;
+  line-break: normal;
+}
+
 figure {
   margin: 2em 0;
   text-align: center;
@@ -953,16 +971,6 @@ a[role="doc-biblioref"].biblioref-is-active {
 
 .author-icon-link:hover .icon-misskey {
   fill: var(--author-misskey-hover);
-}
-
-p,
-h1,
-h2,
-h3,
-h4,
-li,
-.article-abstract {
-  word-break: auto-phrase;
 }
 
 @media (min-width: 1300px) {
