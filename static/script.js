@@ -1,13 +1,13 @@
 function shareX() {
   const url = encodeURIComponent(window.location.href);
   const text = encodeURIComponent(document.title);
-  window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank");
+  window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank", "noopener,noreferrer");
 }
 
 function shareMisskey() {
   const url = encodeURIComponent(window.location.href);
   const text = encodeURIComponent(document.title);
-  window.open(`https://misskey-hub.net/share/?text=${text}&url=${url}`, "_blank");
+  window.open(`https://misskey-hub.net/share/?text=${text}&url=${url}`, "_blank", "noopener,noreferrer");
 }
 
 function openFeedback(url, entryId) {
@@ -15,13 +15,13 @@ function openFeedback(url, entryId) {
 
   const title = document.title;
   if (!entryId) {
-    window.open(url, "_blank");
+    window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
 
   const separator = url.includes("?") ? "&" : "?";
   const fullUrl = `${url}${separator}usp=pp_url&${entryId}=${encodeURIComponent(title)}`;
-  window.open(fullUrl, "_blank");
+  window.open(fullUrl, "_blank", "noopener,noreferrer");
 }
 
 let copyToastTimer;

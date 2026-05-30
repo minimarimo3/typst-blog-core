@@ -63,7 +63,7 @@
                   if "create" in post {
                     html.elem("time", attrs: (class: "card-date", datetime: calver-iso(post.create)), calver-display(post.create))
                   }
-                  html.h3(class: "card-title", post.title)
+                  html.h2(class: "card-title", post.title)
                   if "description" in post {
                     html.p(class: "card-desc", post.description)
                   }

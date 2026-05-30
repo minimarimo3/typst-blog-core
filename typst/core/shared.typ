@@ -58,6 +58,10 @@
   str(version.year) + "-" + _two-digits(version.month) + "-" + _two-digits(version.day)
 }
 
+#let calver-iso-datetime(value) = {
+  calver-iso(value) + "T00:00:00+00:00"
+}
+
 #let calver-key(value) = {
   let version = normalize-calver(value)
   (version.year, version.month, version.day, version.patch)

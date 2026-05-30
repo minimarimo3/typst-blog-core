@@ -14,7 +14,7 @@
     "div",
     attrs: (class: "sidebar-widget author-widget", "data-pagefind-ignore": "all", "data-nosnippet": ""),
     {
-      html.h3(class: "widget-title", i18n.author)
+      html.div(class: "widget-title", i18n.author)
       html.strong(author.name)
       if author.bio != "" {
         html.p(
@@ -24,17 +24,17 @@
       }
       html.div(class: "author-links", {
         if "x" in socials and socials.x != "" {
-          html.a(class: "author-icon-link", href: socials.x, target: "_blank", {
+          html.elem("a", attrs: (class: "author-icon-link", href: socials.x, target: "_blank", rel: "noopener noreferrer", "aria-label": "X"), {
             html.elem("div", attrs: (class: "raw-html-embed icon-x", "data-html": icons.x))
           })
         }
         if "misskey" in socials and socials.misskey != "" {
-          html.a(class: "author-icon-link", href: socials.misskey, target: "_blank", {
+          html.elem("a", attrs: (class: "author-icon-link", href: socials.misskey, target: "_blank", rel: "noopener noreferrer", "aria-label": "Misskey"), {
             html.elem("div", attrs: (class: "raw-html-embed icon-misskey", "data-html": icons.misskey))
           })
         }
         if "github" in socials and socials.github != "" {
-          html.a(class: "author-icon-link", href: socials.github, target: "_blank", {
+          html.elem("a", attrs: (class: "author-icon-link", href: socials.github, target: "_blank", rel: "noopener noreferrer", "aria-label": "GitHub"), {
             html.elem("div", attrs: (class: "raw-html-embed icon-github", "data-html": icons.github))
           })
         }
@@ -58,7 +58,7 @@
       "data-search-error": i18n.search_error,
     ),
     {
-      html.h3(class: "widget-title", i18n.search)
+      html.div(class: "widget-title", i18n.search)
       html.elem(
         "input",
         attrs: (
@@ -77,7 +77,7 @@
 
 #let widget-about() = {
   html.div(class: "sidebar-widget", {
-    html.h3(class: "widget-title", i18n.about_blog)
+    html.div(class: "widget-title", i18n.about_blog)
     html.p(
       style: "font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5em;",
       site.description,
