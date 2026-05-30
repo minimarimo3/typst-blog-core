@@ -31,7 +31,7 @@
 /// - slug (str, none): URLスラッグ（例: `"my-first-post"`）。`none` のとき build.py がファイルパスから推定する
 /// - title (str): 記事タイトル
 /// - authors (array, none): 著者名のリスト（例: `("Alice", "Bob")`）。`none` のとき `site.author.name` が使われる
-/// - create (datetime, none): 作成日（例: `datetime(year: 2024, month: 1, day: 1)`）
+/// - create (datetime, none): 初回公開日（例: `datetime(year: 2024, month: 1, day: 1)`）
 /// - update (datetime, none): 最終更新日。`none` のとき作成日と同じ扱い
 /// - tags (array): タグのリスト（例: `("Typst", "Web")`）
 /// - description (str, none): メタディスクリプション（SEO・OGP用）
@@ -213,13 +213,20 @@
                   if create != none {
                     html.span(class: "meta-date", {
                       i18n.created
-                      html.elem("time", attrs: (datetime: calver-iso(create)), calver-display(create))
+                      html.elem(
+                        "time",
+                        attrs: (
+                          datetime: calver-iso(create),
+                          itemprop: if update == none { "datePublished dateModified" } else { "datePublished" },
+                        ),
+                        calver-display(create),
+                      )
                     })
                   }
                   if update != none {
                     html.span(class: "meta-date", {
                       i18n.updated
-                      html.elem("time", attrs: (datetime: calver-iso(update)), calver-display(update))
+                      html.elem("time", attrs: (datetime: calver-iso(update), itemprop: "dateModified"), calver-display(update))
                     })
                   }
                 })
