@@ -434,6 +434,28 @@ tbody tr:last-child td {
   text-decoration: underline;
 }
 
+.footnote-hover-preview {
+  position: fixed;
+  z-index: 9999;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 20px));
+  padding: 10px 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--card-bg);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  color: var(--text-color);
+  font-size: 0.85rem;
+  font-weight: normal;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.footnote-hover-preview[hidden] {
+  display: none;
+}
+
 .footnotes {
   margin-top: 3rem;
   padding-top: 1rem;

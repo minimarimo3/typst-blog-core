@@ -244,6 +244,76 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+  const footnoteMarkers = Array.from(
+    document.querySelectorAll('.footnote-marker[role="doc-noteref"][href^="#"]'),
+  );
+  const supportsHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (footnoteMarkers.length === 0 || !supportsHover) return;
+
+  const hoverPreview = document.createElement("div");
+  hoverPreview.id = "footnote-hover-preview";
+  hoverPreview.className = "footnote-hover-preview";
+  hoverPreview.setAttribute("role", "tooltip");
+  hoverPreview.setAttribute("data-pagefind-ignore", "all");
+  hoverPreview.setAttribute("data-nosnippet", "");
+  hoverPreview.hidden = true;
+  document.body.append(hoverPreview);
+
+  let activeMarker = null;
+
+  const fragmentToId = (href) => {
+    try {
+      return decodeURIComponent(href.slice(1));
+    } catch {
+      return href.slice(1);
+    }
+  };
+
+  const hideHoverPreview = () => {
+    activeMarker?.removeAttribute("aria-describedby");
+    activeMarker = null;
+    hoverPreview.hidden = true;
+    hoverPreview.replaceChildren();
+  };
+
+  const showHoverPreview = (marker) => {
+    const href = marker.getAttribute("href");
+    const footnote = href ? document.getElementById(fragmentToId(href)) : null;
+    const footnoteBody = footnote?.querySelector(".footnote-body");
+    if (!footnoteBody) return;
+
+    hoverPreview.replaceChildren(footnoteBody.cloneNode(true));
+    hoverPreview.hidden = false;
+    activeMarker?.removeAttribute("aria-describedby");
+    activeMarker = marker;
+    marker.setAttribute("aria-describedby", hoverPreview.id);
+
+    const markerRect = marker.getBoundingClientRect();
+    const previewRect = hoverPreview.getBoundingClientRect();
+    const gap = 8;
+    const viewportPadding = 10;
+    const left = Math.min(
+      window.innerWidth - previewRect.width - viewportPadding,
+      Math.max(
+        viewportPadding,
+        markerRect.left + markerRect.width / 2 - previewRect.width / 2,
+      ),
+    );
+    const above = markerRect.top - previewRect.height - gap;
+    const top = above >= viewportPadding ? above : markerRect.bottom + gap;
+
+    hoverPreview.style.left = `${left}px`;
+    hoverPreview.style.top = `${top}px`;
+  };
+
+  footnoteMarkers.forEach((marker) => {
+    marker.addEventListener("mouseenter", () => showHoverPreview(marker));
+    marker.addEventListener("mouseleave", hideHoverPreview);
+    marker.addEventListener("click", hideHoverPreview);
+  });
+});
+
+document.addEventListener("DOMContentLoaded", () => {
   const citationLinks = Array.from(document.querySelectorAll('a[role="doc-biblioref"][href^="#"]'));
   const footnoteMarkers = Array.from(
     document.querySelectorAll('.footnote-marker[role="doc-noteref"][href^="#"]'),
