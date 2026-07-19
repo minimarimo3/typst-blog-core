@@ -10,8 +10,8 @@
 /// - default_og_image (str, none): 記事やページに画像指定がないときに使う既定OGP画像 URL
 /// - fonts (dictionary): フォント設定。`main` と `code` キーが必須で、各々 `pdf` フィールドが必要。```typst
 ///   fonts: (
-///     main: (pdf: "Noto Serif CJK JP", web: "Noto Serif JP", weights: "400;700", fallback: "serif"),
-///     code: (pdf: "Fira Code",         web: "Fira Code",     weights: "300..700", fallback: "monospace"),
+///     main: (pdf: ("Noto Serif", "Noto Serif CJK JP"), web: ("Noto Serif", "Noto Serif JP"), weights: "400;700", fallback: "serif"),
+///     code: (pdf: ("Fira Code", "Consolas"), web: ("Fira Code",), weights: "300..700", fallback: "monospace"),
 ///     // heading / math / 任意名のフォントも追加可
 ///   )
 ///   ```
@@ -75,6 +75,30 @@
   assert("code" in fonts, message: "site.fonts.code: 必須です")
   assert("pdf" in fonts.main, message: "site.fonts.main.pdf: 必須です")
   assert("pdf" in fonts.code, message: "site.fonts.code.pdf: 必須です")
+  for (name, entry) in fonts {
+    assert(type(entry) == dictionary, message: "site.fonts." + name + ": 辞書が必要です")
+    let web = entry.at("web", default: none)
+    assert(web == none or type(web) == array, message: "site.fonts." + name + ".web: フォント名の配列か none が必要です")
+    if web != none {
+      assert(web.len() > 0, message: "site.fonts." + name + ".web: 空でない配列が必要です")
+      for (index, family) in web.enumerate() {
+        assert(
+          type(family) == str and family.trim() != "",
+          message: "site.fonts." + name + ".web.at(" + str(index) + "): 空でないフォント名が必要です",
+        )
+      }
+    }
+    let weights = entry.at("weights", default: none)
+    assert(
+      weights == none or (type(weights) == str and weights.trim() != ""),
+      message: "site.fonts." + name + ".weights: 空でない文字列か none が必要です",
+    )
+    let fallback = entry.at("fallback", default: "serif")
+    assert(
+      fallback == none or (type(fallback) == str and fallback.trim() != ""),
+      message: "site.fonts." + name + ".fallback: 空でない文字列か none が必要です",
+    )
+  }
 
   // author
   assert(type(author) == dictionary, message: "site.author: 辞書が必要です")

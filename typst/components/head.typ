@@ -1,5 +1,6 @@
 #import "/site.typ": site
 #import "../core/shared.typ": base-path
+#import "font-config.typ": google-font-families, font-css-lines
 
 #let _json-ld-text(value) = {
   json.encode(value)
@@ -56,17 +57,7 @@
   }
 
   // site.fonts の全エントリから web フォントを動的に収集
-  let _gf-families = site.fonts.pairs()
-    .filter(pair => {
-      let e = pair.at(1)
-      let w = e.at("web", default: none)
-      let wt = e.at("weights", default: none)
-      w != none and w != "" and wt != none and wt != ""
-    })
-    .map(pair => {
-      let e = pair.at(1)
-      e.web.replace(" ", "+") + ":wght@" + e.weights
-    })
+  let _gf-families = google-font-families(site.fonts)
 
   if _gf-families.len() > 0 {
     html.link(rel: "preconnect", href: "https://fonts.googleapis.com")
@@ -83,18 +74,7 @@
   html.link(rel: "stylesheet", href: base-path + "/themes/" + site.at("theme", default: "dark") + ".css")
 
   // theme CSS より後に注入することで CSS 変数を上書き（--font-{key} 形式）
-  let _css-lines = site.fonts.pairs()
-    .filter(pair => {
-      let web = pair.at(1).at("web", default: none)
-      web != none and web != ""
-    })
-    .map(pair => {
-      let key = pair.at(0)
-      let e = pair.at(1)
-      let fb = e.at("fallback", default: "serif")
-      let val = if fb != none and fb != "" { "\"" + e.web + "\", " + fb } else { "\"" + e.web + "\"" }
-      "  --font-" + key + ": " + val + ";"
-    })
+  let _css-lines = font-css-lines(site.fonts)
   html.elem("style", ":root {\n" + _css-lines.join("\n") + "\n}")
 
   html.elem("script", attrs: (src: base-path + "/script.js", defer: ""))
