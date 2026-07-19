@@ -244,64 +244,12 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-  const footnoteMarkers = document.querySelectorAll('.footnote-marker[role="doc-noteref"]');
-  if (footnoteMarkers.length === 0) return;
-
-  const popover = document.createElement("div");
-  popover.id = "footnote-popover";
-  popover.className = "footnote-popover";
-  popover.setAttribute("role", "tooltip");
-  popover.hidden = true;
-  document.body.append(popover);
-  let activeMarker = null;
-
-  const hidePopover = () => {
-    activeMarker?.removeAttribute("aria-describedby");
-    activeMarker = null;
-    popover.hidden = true;
-    popover.replaceChildren();
-  };
-
-  const showPopover = (marker) => {
-    const href = marker.getAttribute("href");
-    if (!href || !href.startsWith("#")) return;
-
-    const note = document.getElementById(decodeURIComponent(href.slice(1)));
-    const body = note?.querySelector(".footnote-body");
-    if (!body) return;
-
-    popover.replaceChildren(body.cloneNode(true));
-    popover.hidden = false;
-    activeMarker?.removeAttribute("aria-describedby");
-    activeMarker = marker;
-    activeMarker.setAttribute("aria-describedby", popover.id);
-
-    const markerRect = marker.getBoundingClientRect();
-    const popoverRect = popover.getBoundingClientRect();
-    const gap = 8;
-    const viewportPadding = 10;
-    const left = Math.min(
-      window.innerWidth - popoverRect.width - viewportPadding,
-      Math.max(viewportPadding, markerRect.left + markerRect.width / 2 - popoverRect.width / 2),
-    );
-    const above = markerRect.top - popoverRect.height - gap;
-    const top = above >= viewportPadding ? above : markerRect.bottom + gap;
-
-    popover.style.left = `${left}px`;
-    popover.style.top = `${top}px`;
-  };
-
-  footnoteMarkers.forEach((marker) => {
-    marker.addEventListener("mouseenter", () => showPopover(marker));
-    marker.addEventListener("mouseleave", hidePopover);
-    marker.addEventListener("focus", () => showPopover(marker));
-    marker.addEventListener("blur", hidePopover);
-  });
-});
-
-document.addEventListener("DOMContentLoaded", () => {
   const citationLinks = Array.from(document.querySelectorAll('a[role="doc-biblioref"][href^="#"]'));
-  if (citationLinks.length === 0) return;
+  const footnoteMarkers = Array.from(
+    document.querySelectorAll('.footnote-marker[role="doc-noteref"][href^="#"]'),
+  );
+  const previewSources = [...citationLinks, ...footnoteMarkers];
+  if (previewSources.length === 0) return;
 
   const sidebarInner = document.querySelector(".sidebar-inner");
   const preview = document.createElement("aside");
@@ -325,7 +273,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeButton = document.createElement("button");
   closeButton.className = "reference-preview-close";
   closeButton.type = "button";
-  closeButton.setAttribute("aria-label", "参考文献を閉じる");
+  const article = document.querySelector("article[data-content-preview-close-label]");
+  closeButton.setAttribute(
+    "aria-label",
+    article?.dataset.contentPreviewCloseLabel || "Close preview",
+  );
   closeButton.textContent = "x";
 
   const body = document.createElement("div");
@@ -340,16 +292,20 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.append(preview);
   }
 
-  const clearActiveCitation = () => {
-    citationLinks.forEach((link) => {
-      link.classList.remove("biblioref-is-active");
+  let activeSource = null;
+
+  const clearActiveSource = () => {
+    previewSources.forEach((link) => {
+      link.classList.remove("content-preview-source-is-active");
       link.setAttribute("aria-expanded", "false");
     });
   };
 
-  const closePreview = () => {
+  const closePreview = ({ restoreFocus = false } = {}) => {
     preview.classList.remove("is-open");
-    clearActiveCitation();
+    clearActiveSource();
+    if (restoreFocus && activeSource?.isConnected) activeSource.focus();
+    activeSource = null;
   };
 
   const fragmentToId = (href) => {
@@ -376,34 +332,62 @@ document.addEventListener("DOMContentLoaded", () => {
     return list;
   };
 
+  const cloneFootnoteEntry = (entry) => {
+    const footnoteBody = entry.querySelector(".footnote-body");
+    if (!footnoteBody) return null;
+
+    const clone = footnoteBody.cloneNode(true);
+    clone.classList.add("footnote-preview-entry");
+    return clone;
+  };
+
   const openPreview = (link) => {
     const href = link.getAttribute("href");
     const entry = document.getElementById(fragmentToId(href));
     if (!entry) return;
 
-    body.replaceChildren(cloneBibliographyEntry(entry));
-    title.textContent = `参考文献 ${link.textContent.trim()}`;
+    const isFootnote = link.matches('.footnote-marker[role="doc-noteref"]');
+    const content = isFootnote
+      ? cloneFootnoteEntry(entry)
+      : cloneBibliographyEntry(entry);
+    if (!content) return;
 
-    clearActiveCitation();
-    link.classList.add("biblioref-is-active");
+    const sectionTitle = isFootnote
+      ? document.getElementById("footnotes-heading")?.textContent.trim() || "Footnotes"
+      : entry.closest('[role="doc-bibliography"]')?.querySelector("h1, h2, h3")?.textContent.trim()
+        || "References";
+
+    body.replaceChildren(content);
+    title.textContent = `${sectionTitle} ${link.textContent.trim()}`;
+
+    clearActiveSource();
+    activeSource = link;
+    link.classList.add("content-preview-source-is-active");
     link.setAttribute("aria-expanded", "true");
     preview.classList.add("is-open");
   };
 
-  citationLinks.forEach((link) => {
+  previewSources.forEach((link) => {
     link.setAttribute("aria-controls", "reference-preview");
     link.setAttribute("aria-haspopup", "dialog");
     link.setAttribute("aria-expanded", "false");
-
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openPreview(link);
-    });
   });
 
-  closeButton.addEventListener("click", closePreview);
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest(
+      'a[role="doc-biblioref"][href^="#"], .footnote-marker[role="doc-noteref"][href^="#"]',
+    );
+    if (!link) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    openPreview(link);
+  });
+
+  closeButton.addEventListener("click", () => closePreview({ restoreFocus: true }));
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closePreview();
+    if (event.key === "Escape" && preview.classList.contains("is-open")) {
+      closePreview({ restoreFocus: true });
+    }
   });
 });

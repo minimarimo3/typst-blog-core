@@ -324,13 +324,17 @@ def write_generated_posts(
     context: BlogContext,
     posts: list[dict],
     tag_slugs: dict[str, str],
+    *,
+    include_drafts: bool = False,
 ) -> None:
     context.generated_posts_file.parent.mkdir(parents=True, exist_ok=True)
-    published_posts = [post for post in posts if not post["draft"]]
+    visible_posts = (
+        posts if include_drafts else [post for post in posts if not post["draft"]]
+    )
     lines: list[str] = []
-    if published_posts:
+    if visible_posts:
         lines.append("#let post-data = (")
-        for post in published_posts:
+        for post in visible_posts:
             tags = post["tags"]
             tag_value = (
                 "("
@@ -353,6 +357,7 @@ def write_generated_posts(
                     f"    update: {format_typst_calver(update) if update else 'none'},",
                     f"    description: {typst_string(post['description'])},",
                     f"    tags: {tag_value},",
+                    f"    draft: {'true' if post['draft'] else 'false'},",
                     f"    source_url_path: {typst_string(source_url_path)},",
                     "  ),",
                 ]

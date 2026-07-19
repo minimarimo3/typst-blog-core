@@ -56,6 +56,9 @@
                   if "create" in post {
                     html.elem("time", attrs: (class: "card-date", datetime: calver-iso(post.create)), calver-display(post.create))
                   }
+                  if post.at("draft", default: false) {
+                    html.span(class: "draft-badge", i18n.draft)
+                  }
                   html.h2(class: "card-title", post.title)
                   if "description" in post {
                     html.p(class: "card-desc", post.description)

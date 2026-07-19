@@ -95,6 +95,7 @@ def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
                 f"      create: {format_typst_calver(post['create'])},",
                 f"      description: {typst_string(post['description'])},",
                 f"      tags: {tag_value},",
+                f"      draft: {'true' if post['draft'] else 'false'},",
                 "    ),",
             ]
         )
@@ -118,9 +119,14 @@ def build_tag_pages(
     context: BlogContext,
     posts: list[dict],
     tag_slugs: dict[str, str],
+    *,
+    include_drafts: bool = False,
 ) -> None:
     tag_posts: dict[str, list[dict]] = {}
-    for post in (post for post in posts if not post["draft"]):
+    visible_posts = (
+        posts if include_drafts else (post for post in posts if not post["draft"])
+    )
+    for post in visible_posts:
         for tag in post["tags"]:
             tag_posts.setdefault(tag, []).append(post)
     if not tag_posts:
@@ -261,6 +267,8 @@ def generate_sitemap(context: BlogContext, site: dict, posts: list[dict]) -> Non
 def build(
     root_dir: Path | str | None = None,
     base_path: str | None = None,
+    *,
+    include_drafts: bool = False,
 ) -> None:
     context = BlogContext.create(root_dir, base_path)
     print("Starting build...")
@@ -276,16 +284,16 @@ def build(
     if context.output_dir.exists():
         shutil.rmtree(context.output_dir)
     context.output_dir.mkdir(parents=True, exist_ok=True)
-    write_generated_posts(context, posts, tag_slugs)
+    write_generated_posts(context, posts, tag_slugs, include_drafts=include_drafts)
     for post in posts:
-        if post["draft"]:
+        if post["draft"] and not include_drafts:
             print(f"Draft skip: {post['title']}")
         else:
             build_post(context, post)
     print("Building static pages...")
     build_static_pages(context)
     print("Building tag pages...")
-    build_tag_pages(context, posts, tag_slugs)
+    build_tag_pages(context, posts, tag_slugs, include_drafts=include_drafts)
     print("Generating RSS and sitemap...")
     generate_rss(context, site, posts)
     generate_sitemap(context, site, posts)

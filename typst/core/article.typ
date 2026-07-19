@@ -39,7 +39,7 @@
 /// - description (str, none): メタディスクリプション（SEO・OGP用）
 /// - abstract (content, none): 記事要約。`none` のとき `description` がフォールバックとして使われる
 /// - og-image (str, none): OGP画像の URL（例: `"https://example.com/og.png"`）
-/// - draft (bool): `true` のとき下書き。build コマンドが公開対象から除外する
+/// - draft (bool): `true` のとき下書き。preview では表示し、build では公開対象から除外する
 /// -> dictionary
 #let post-meta(
   slug: none,
@@ -237,9 +237,17 @@
   
   let share-enabled = site.share.x or site.share.misskey or site.share.copy
   let feedback-enabled = site.feedback.google_form_url != none and site.feedback.google_form_url != ""
+  let article-indexing-attrs = if draft {
+    ("data-pagefind-ignore": "all", "data-nosnippet": "")
+  } else {
+    ("data-pagefind-body": "")
+  }
 
   html.html(lang: site.language, {
     html.head({
+      if draft {
+        html.meta(name: "robots", content: "noindex, nofollow")
+      }
       common-head(
         title,
         description: description,
@@ -280,9 +288,18 @@
             )
           })
 
-          html.elem("article", attrs: ("data-pagefind-body": "", "aria-labelledby": "article-title", itemscope: "", itemtype: "https://schema.org/BlogPosting"), {
+          html.elem("article", attrs: (
+            ..article-indexing-attrs,
+            "aria-labelledby": "article-title",
+            "data-content-preview-close-label": i18n.close_preview,
+            itemscope: "",
+            itemtype: "https://schema.org/BlogPosting",
+          ), {
             html.header(class: "article-header", {
               html.elem("h1", attrs: (id: "article-title", class: "article-title", itemprop: "headline"), title)
+              if draft {
+                html.span(class: "draft-badge", i18n.draft)
+              }
               html.div(class: "article-meta", {
                 html.div(class: "meta-dates", {
                   if create != none {
@@ -461,6 +478,9 @@
                     html.div(class: "card-content", {
                       if "create" in post {
                         html.elem("time", attrs: (class: "card-date", datetime: calver-iso(post.create)), calver-display(post.create))
+                      }
+                      if post.at("draft", default: false) {
+                        html.span(class: "draft-badge", i18n.draft)
                       }
                       html.h3(class: "card-title", post.title)
                       if "description" in post {

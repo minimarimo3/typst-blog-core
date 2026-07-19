@@ -105,6 +105,37 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 "update: (year: 2026, month: 3, day: 4, patch: 0)", generated
             )
 
+    def test_drafts_are_only_generated_for_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            source = context.root_dir / "draft-post" / "index.typ"
+            source.parent.mkdir()
+            source.write_text("draft", encoding="utf-8")
+            draft = {
+                "slug": "draft-post",
+                "title": "Draft Post",
+                "create": make_calver(2026, 7, 19),
+                "update": None,
+                "description": "Description",
+                "tags": ("Draft",),
+                "draft": True,
+                "source_file": source,
+            }
+
+            write_generated_posts(context, [draft], {"Draft": "Draft"})
+            published = context.generated_posts_file.read_text(encoding="utf-8")
+            self.assertNotIn('"draft-post"', published)
+
+            write_generated_posts(
+                context,
+                [draft],
+                {"Draft": "Draft"},
+                include_drafts=True,
+            )
+            preview = context.generated_posts_file.read_text(encoding="utf-8")
+            self.assertIn('"draft-post"', preview)
+            self.assertIn("draft: true", preview)
+
 
 class PostsDirectoryTests(unittest.TestCase):
     def test_resolves_configured_directory_inside_blog_root(self) -> None:

@@ -43,6 +43,10 @@ Preview mode builds the site for `/`, starts a server at
 after successful rebuilds. Canonical URLs, RSS, and sitemap keep using the
 public `base_url` from `site.typ`.
 
+Preview builds include drafts and label them on post cards and article pages.
+Draft pages use `noindex` and are excluded from Pagefind. Regular builds keep
+excluding drafts from pages, tag routes, RSS, and sitemap output.
+
 ```sh
 python3 vendor/typst-blog-core/command.py preview
 ```

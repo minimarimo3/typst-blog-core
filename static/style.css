@@ -434,27 +434,6 @@ tbody tr:last-child td {
   text-decoration: underline;
 }
 
-.footnote-popover {
-  position: fixed;
-  width: max-content;
-  max-width: 300px;
-  background-color: var(--popover-bg);
-  color: var(--popover-text);
-  text-align: left;
-  padding: 10px 15px;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: normal;
-  line-height: 1.5;
-  z-index: 9999;
-  pointer-events: none;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-}
-
-.footnote-popover[hidden] {
-  display: none;
-}
-
 .footnotes {
   margin-top: 3rem;
   padding-top: 1rem;
@@ -622,6 +601,23 @@ tbody tr:last-child td {
   display: block;
   margin-bottom: 8px;
   font-family: var(--font-code);
+}
+
+.draft-badge {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 3px 8px;
+  border: 1px solid var(--accent-color);
+  border-radius: 999px;
+  color: var(--accent-color);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.article-title + .draft-badge {
+  margin-top: -8px;
 }
 
 .card-title {
@@ -835,7 +831,12 @@ tbody tr:last-child td {
   word-break: break-word;
 }
 
-a[role="doc-biblioref"].biblioref-is-active {
+.footnote-preview-entry {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.content-preview-source-is-active {
   border-radius: 4px;
   background-color: var(--biblioref-active-bg);
   color: var(--biblioref-active-text);
@@ -1061,10 +1062,6 @@ a[role="doc-biblioref"].biblioref-is-active {
 
   .sidebar-widget.toc-widget {
     display: none;
-  }
-
-  .footnote-popover {
-    max-width: calc(100vw - 30px);
   }
 
   .reference-preview {
