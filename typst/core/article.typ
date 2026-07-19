@@ -103,6 +103,7 @@
   assert(create != none, message: "create is required")
   assert(description != none, message: "description is required")
   let generated-update = post-data.at(slug, default: (:)).at("update", default: none)
+  let url-slug = post-data.at(slug).at("url-slug")
   let effective-update = if site.update_policy == "git" { generated-update } else { update }
   let abstract-content = if abstract != none { abstract } else { description }
   let seo-data = article-seo-data(
@@ -112,6 +113,7 @@
     create: create,
     update: effective-update,
     slug: slug,
+    url-slug: url-slug,
     image: og-image,
   )
   let article-image-url = seo-data.image-url
@@ -166,7 +168,7 @@
         title,
         description: description,
         image: article-image-url,
-        url: "/" + slug + "/",
+        url: "/" + url-slug + "/",
         og_type: "article",
         json_ld: article-json-ld,
         article_published_time: calver-iso-datetime(create),

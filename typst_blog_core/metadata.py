@@ -17,7 +17,6 @@ POST_METADATA_LABEL = "<post-meta>"
 EXCLUDED_DIRS = {".git", ".github", "public", "typst", "vendor", "__pycache__"}
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
 THEME_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
-POST_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
 GENERATED_ROUTE_NAMES = {"pagefind", "tags", "themes"}
 PORTABLE_RESERVED_NAMES = {
@@ -203,14 +202,33 @@ def load_post_metadata(context: BlogContext, path: Path) -> dict | None:
 def validate_post_slug(value: object) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError("slug is required and must be a string")
-    if not POST_SLUG_RE.fullmatch(value):
-        raise ValueError(
-            "slug must contain only lowercase ASCII letters, numbers, and single hyphens "
-            "between words (example: my-first-post)"
+    normalized = unicodedata.normalize("NFC", value)
+    if normalized != value:
+        raise ValueError("slug must use Unicode NFC normalization")
+    words = value.split("-")
+    if any(
+        not word
+        or not all(
+            character.isalnum() and character == character.lower()
+            for character in word
         )
-    if value in RESERVED_POST_SLUGS:
+        for word in words
+    ):
+        raise ValueError(
+            "slug must contain only lowercase Unicode letters, numbers, and single hyphens "
+            "between words (examples: my-first-post, 日本語の記事)"
+        )
+    if value.casefold() in RESERVED_POST_SLUGS:
         raise ValueError(f"slug '{value}' is reserved for site output")
     return value
+
+
+def post_slug_to_url_segment(slug: str) -> str:
+    return quote(slug, safe="-")
+
+
+def portable_route_key(value: str) -> str:
+    return unicodedata.normalize("NFC", value).casefold()
 
 
 def validate_post_tags(value: object) -> tuple[str, ...]:
@@ -265,16 +283,16 @@ def build_tag_slug_map(posts: list[dict]) -> dict[str, str]:
 def validate_post_output_routes(posts: list[dict], static_dir: Path) -> None:
     if not static_dir.is_dir():
         return
-    static_routes = {path.name.casefold(): path.name for path in static_dir.iterdir()}
+    static_routes = {portable_route_key(path.name): path.name for path in static_dir.iterdir()}
     for post in posts:
-        collision = static_routes.get(post["slug"].casefold())
+        collision = static_routes.get(portable_route_key(post["slug"]))
         if collision is not None:
             raise ValueError(f"post slug {post['slug']!r} conflicts with static/{collision}")
 
 
 def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[dict]:
     posts: list[dict] = []
-    seen_slugs: set[str] = set()
+    seen_slugs: dict[str, str] = {}
     for source_file in discover_post_files(context, posts_dir):
         meta = load_post_metadata(context, source_file)
         if meta is None:
@@ -292,9 +310,11 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
         draft = meta.get("draft", True)
         if not isinstance(draft, bool):
             raise ValueError(f"{relative}: draft must be true or false")
-        if slug in seen_slugs:
-            raise ValueError(f"duplicate slug: {slug}")
-        seen_slugs.add(slug)
+        route_key = portable_route_key(slug)
+        previous_slug = seen_slugs.get(route_key)
+        if previous_slug is not None:
+            raise ValueError(f"post URL collision: {previous_slug!r} and {slug!r}")
+        seen_slugs[route_key] = slug
         if not title:
             raise ValueError(f"{relative}: title is required")
         if create is None:
@@ -304,6 +324,7 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
         posts.append(
             {
                 "slug": slug,
+                "url_slug": post_slug_to_url_segment(slug),
                 "title": title,
                 "create": create,
                 "update": update,
@@ -350,6 +371,7 @@ def write_generated_posts(
             lines.extend(
                 [
                     f"  {typst_string(post['slug'])}: (",
+                    f"    url-slug: {typst_string(post['url_slug'])},",
                     f"    title: {typst_string(post['title'])},",
                     f"    create: {format_typst_calver(post['create'])},",
                     f"    update: {format_typst_calver(update) if update else 'none'},",

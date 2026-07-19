@@ -56,6 +56,37 @@ class NewPostTests(unittest.TestCase):
             )
             self.assertIn("draft: false", index_file.read_text(encoding="utf-8"))
 
+    def test_creates_post_with_japanese_slug(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_post(
+                root_dir=directory,
+                slug="日本語の記事",
+                title="日本語の記事",
+                description="説明",
+            )
+            self.assertEqual(
+                index_file,
+                Path(directory).resolve() / "日本語の記事" / "index.typ",
+            )
+            self.assertIn(
+                'slug: "日本語の記事"',
+                index_file.read_text(encoding="utf-8"),
+            )
+
+    def test_normalizes_new_post_slug_to_nfc(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_post(
+                root_dir=directory,
+                slug="カ\N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}",
+                title="正規化",
+                description="説明",
+            )
+            self.assertEqual(
+                index_file,
+                Path(directory).resolve() / "ガ" / "index.typ",
+            )
+            self.assertIn('slug: "ガ"', index_file.read_text(encoding="utf-8"))
+
     def test_creates_post_under_configured_posts_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with patch(

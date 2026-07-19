@@ -153,13 +153,13 @@
       html.hr(class: "section-divider")
       html.elem("nav", attrs: (class: "post-nav", "aria-label": i18n.adjacent_articles, "data-pagefind-ignore": "all", "data-nosnippet": ""), {
         if previous-post != none {
-          html.a(class: "post-nav-link post-nav-prev", href: base-path + "/" + previous-post.slug + "/", {
+          html.a(class: "post-nav-link post-nav-prev", href: base-path + "/" + previous-post.at("url-slug") + "/", {
             html.span(class: "post-nav-label", i18n.prev_article)
             html.span(class: "post-nav-title", previous-post.title)
           })
         }
         if next-post != none {
-          html.a(class: "post-nav-link post-nav-next", href: base-path + "/" + next-post.slug + "/", {
+          html.a(class: "post-nav-link post-nav-next", href: base-path + "/" + next-post.at("url-slug") + "/", {
             html.span(class: "post-nav-label", i18n.next_article)
             html.span(class: "post-nav-title", next-post.title)
           })

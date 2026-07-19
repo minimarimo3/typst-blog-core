@@ -86,9 +86,11 @@ and preserves authored update values as a fallback.
 
 ## URL Route Rules
 
-Post slugs are validated as lowercase ASCII words separated by single hyphens.
-Generated route names and names that are unsafe on common filesystems are
-rejected before anything is written outside the expected post directory.
+Post slugs may use lowercase Unicode letters and numbers separated by single hyphens.
+They must use NFC normalization. Generated URLs percent-encode each post path
+segment once, while generated route names and names that are unsafe on common
+filesystems are rejected before anything is written outside the expected post
+directory.
 
 Tag display names may contain Unicode, whitespace, and symbols. The build owns
 their URL-segment encoding and passes the resulting mapping to every Typst page,

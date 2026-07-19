@@ -1,8 +1,8 @@
 #import "/site.typ": site
 #import "shared.typ": calver-iso-datetime
 
-#let _article-url(slug) = {
-  site.base_url + "/" + slug.trim("/", at: start).trim("/", at: end) + "/"
+#let _article-url(url-slug) = {
+  site.base_url + "/" + url-slug + "/"
 }
 
 #let _absolute-site-url(value) = {
@@ -68,8 +68,8 @@
   data
 }
 
-#let _article-json-ld(title, description, authors, create, update, slug, image-url) = {
-  let page-url = _article-url(slug)
+#let _article-json-ld(title, description, authors, create, update, url-slug, image-url) = {
+  let page-url = _article-url(url-slug)
   let modified = if update == none { create } else { update }
   let author-data = authors.map(name => _person-json-ld(name))
   let data = (
@@ -101,14 +101,16 @@
   create: none,
   update: none,
   slug: none,
+  url-slug: none,
   image: none,
 ) = {
   assert(title != none, message: "article-seo-data: title is required")
   assert(description != none, message: "article-seo-data: description is required")
   assert(create != none, message: "article-seo-data: create is required")
   assert(slug != none, message: "article-seo-data: slug is required")
+  assert(url-slug != none, message: "article-seo-data: url-slug is required")
 
-  let page-url = _article-url(slug)
+  let page-url = _article-url(url-slug)
   let image-url = _article-image-url(image, page-url)
   (
     image-url: image-url,
@@ -118,7 +120,7 @@
       authors,
       create,
       update,
-      slug,
+      url-slug,
       image-url,
     ),
   )

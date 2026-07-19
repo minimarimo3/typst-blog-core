@@ -7,7 +7,7 @@
       .pairs()
       .map(pair => {
         let (key, val) = pair
-        val + (url: base-path + "/" + key + "/")
+        val + (url: base-path + "/" + val.at("url-slug") + "/")
       })
       .sorted(key: post => calver-key(post.create))
       .rev()

@@ -91,6 +91,7 @@ def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
         lines.extend(
             [
                 f"    {typst_string(post['slug'])}: (",
+                f"      url-slug: {typst_string(post['url_slug'])},",
                 f"      title: {typst_string(post['title'])},",
                 f"      create: {format_typst_calver(post['create'])},",
                 f"      description: {typst_string(post['description'])},",
@@ -223,7 +224,7 @@ def generate_rss(context: BlogContext, site: dict, posts: list[dict]) -> None:
   <lastBuildDate>{now}</lastBuildDate>
 """
     for post in (post for post in posts if not post["draft"]):
-        link = f"{base_url}/{post['slug']}/"
+        link = f"{base_url}/{post['url_slug']}/"
         pub_date = post["create"].as_datetime().strftime("%a, %d %b %Y 00:00:00 GMT")
         xml += f"""  <item>
     <title>{escape(post["title"])}</title>
@@ -247,7 +248,7 @@ def generate_sitemap(context: BlogContext, site: dict, posts: list[dict]) -> Non
   </url>
 """
     for post in (post for post in posts if not post["draft"]):
-        link = f"{base_url}/{post['slug']}/"
+        link = f"{base_url}/{post['url_slug']}/"
         last_mod_value = (
             post["update"].as_datetime()
             if post["update"]

@@ -14,6 +14,7 @@ from typst_blog_core.metadata import (  # noqa: E402
     build_tag_slug_map,
     discover_post_files,
     make_calver,
+    post_slug_to_url_segment,
     resolve_posts_dir,
     tag_to_slug,
     validate_post_output_routes,
@@ -26,9 +27,14 @@ from typst_blog_core.metadata import (  # noqa: E402
 class PostSlugTests(unittest.TestCase):
     def test_accepts_canonical_slug(self) -> None:
         self.assertEqual(validate_post_slug("my-first-post"), "my-first-post")
+        self.assertEqual(validate_post_slug("日本語の記事"), "日本語の記事")
+        self.assertEqual(
+            post_slug_to_url_segment("日本語の記事"),
+            "%E6%97%A5%E6%9C%AC%E8%AA%9E%E3%81%AE%E8%A8%98%E4%BA%8B",
+        )
 
     def test_rejects_unsafe_or_ambiguous_slugs(self) -> None:
-        for slug in ("../outside", "two words", "Uppercase", "two--hyphens", "/root"):
+        for slug in ("../outside", "two words", "Uppercase", "two--hyphens", "/root", "100%"):
             with self.subTest(slug=slug), self.assertRaises(ValueError):
                 validate_post_slug(slug)
 
@@ -43,6 +49,10 @@ class PostSlugTests(unittest.TestCase):
             (static_dir / "my-first-post").mkdir()
             with self.assertRaisesRegex(ValueError, "conflicts with static"):
                 validate_post_output_routes([{"slug": "my-first-post"}], static_dir)
+
+    def test_rejects_non_nfc_slug(self) -> None:
+        with self.assertRaisesRegex(ValueError, "NFC"):
+            validate_post_slug("カ\N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}")
 
 
 class TagSlugTests(unittest.TestCase):
@@ -89,6 +99,7 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 [
                     {
                         "slug": "post",
+                        "url_slug": "post",
                         "title": "Post",
                         "create": make_calver(2026, 1, 1),
                         "update": make_calver(2026, 3, 4),
@@ -113,6 +124,7 @@ class GeneratedRouteDataTests(unittest.TestCase):
             source.write_text("draft", encoding="utf-8")
             draft = {
                 "slug": "draft-post",
+                "url_slug": "draft-post",
                 "title": "Draft Post",
                 "create": make_calver(2026, 7, 19),
                 "update": None,

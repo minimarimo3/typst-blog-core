@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import unicodedata
 from pathlib import Path
 
 from .context import BlogContext
 from .metadata import (
     discover_post_files,
     load_site_metadata,
+    portable_route_key,
     resolve_posts_dir,
     typst_string,
     validate_post_slug,
@@ -55,18 +57,6 @@ def _post_source(
 '''
 
 
-def _find_existing_slug(context: BlogContext, slug: str) -> Path | None:
-    pattern = re.compile(rf'\bslug\s*:\s*"{re.escape(slug)}"')
-    for source_file in discover_post_files(context):
-        try:
-            source = source_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
-        if pattern.search(source):
-            return source_file
-    return None
-
-
 def create_post(
     *,
     root_dir: Path | str | None,
@@ -80,7 +70,7 @@ def create_post(
     context = BlogContext.create(root_dir)
     site = load_site_metadata(context)
     posts_dir = resolve_posts_dir(context, site)
-    slug = validate_post_slug(slug)
+    slug = validate_post_slug(unicodedata.normalize("NFC", slug))
     if not title.strip():
         raise ValueError("title must not be empty")
     if not description.strip():
@@ -90,16 +80,22 @@ def create_post(
     if destination.exists():
         relative = destination.relative_to(context.root_dir)
         raise FileExistsError(f"destination already exists: {relative}")
-    existing = _find_existing_slug(context, slug)
-    if existing is not None:
-        relative = existing.relative_to(context.root_dir)
-        raise ValueError(f"slug '{slug}' is already used by {relative}")
+    requested_route_key = portable_route_key(slug)
+    for source_file in discover_post_files(context):
+        try:
+            source = source_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        match = re.search(r'\bslug\s*:\s*"([^"]+)"', source)
+        if match is not None and portable_route_key(match.group(1)) == requested_route_key:
+            relative = source_file.relative_to(context.root_dir)
+            raise ValueError(f"slug '{slug}' is already used by {relative}")
     if context.user_static_dir.is_dir():
         static_names = {
-            path.name.casefold(): path.name
+            portable_route_key(path.name): path.name
             for path in context.user_static_dir.iterdir()
         }
-        collision = static_names.get(slug.casefold())
+        collision = static_names.get(requested_route_key)
         if collision is not None:
             raise ValueError(f"slug '{slug}' conflicts with static/{collision}")
 
