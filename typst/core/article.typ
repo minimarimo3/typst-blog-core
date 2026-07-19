@@ -1,7 +1,9 @@
 #import "/site.typ": site
 #import "shared.typ": calver-display, calver-iso, calver-iso-datetime, calver-key, export-target, main-font, heading-font, math-font, base-path
 #import "i18n.typ": i18n
-#import "/typst/generated/posts.typ": post-data
+#import "/typst/generated/posts.typ" as generated-posts
+#let post-data = generated-posts.post-data
+#let tag-slugs = dictionary(generated-posts).at("tag-slugs", default: (:))
 #import "../components/head.typ": common-head
 #import "../components/widgets.typ": widget-author, widget-search
 #import "@preview/suiji:0.5.0": *
@@ -304,13 +306,13 @@
                 if tags.len() > 0 {
                   html.div(class: "meta-tags", {
                     for tag in tags {
-                      html.a(class: "tag", href: base-path + "/tags/" + tag.replace(" ", "-") + "/", "#" + tag)
+                      html.a(class: "tag", href: base-path + "/tags/" + tag-slugs.at(tag) + "/", "#" + tag)
                     }
                   })
                 }
                 let github-repo = site.at("github_repo", default: none)
                 if github-repo != none and github-repo != "" {
-                  let source-path = post-data.at(slug, default: (:)).at("source_path", default: none)
+                  let source-path = post-data.at(slug, default: (:)).at("source_url_path", default: none)
                   if source-path != none {
                     html.elem("div", attrs: (class: "meta-edit-history", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
                       html.elem(

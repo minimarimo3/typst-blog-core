@@ -12,8 +12,10 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 from xml.sax.saxutils import escape
 
 CORE_DIR = Path(__file__).resolve().parent
@@ -49,6 +51,15 @@ STATIC_EXTENSIONS = {
 }
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
 THEME_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
+POST_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
+GENERATED_ROUTE_NAMES = {"pagefind", "tags", "themes"}
+PORTABLE_RESERVED_NAMES = {
+    "aux", "con", "nul", "prn",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
+RESERVED_POST_SLUGS = GENERATED_ROUTE_NAMES | PORTABLE_RESERVED_NAMES
 BASE_PATH_OVERRIDE: str | None = None
 PREVIEW_HOST = "127.0.0.1"
 PREVIEW_PORT = 8000
@@ -285,6 +296,81 @@ def load_post_metadata(path: Path) -> dict | None:
     return data[0]
 
 
+def validate_post_slug(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError("slug is required and must be a string")
+    if not POST_SLUG_RE.fullmatch(value):
+        raise ValueError(
+            "slug must contain only lowercase ASCII letters, numbers, and single hyphens "
+            "between words (example: my-first-post)"
+        )
+    if value in RESERVED_POST_SLUGS:
+        raise ValueError(f"slug '{value}' is reserved for site output")
+    return value
+
+
+def validate_post_tags(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("tags must be an array of strings")
+
+    tags: list[str] = []
+    seen: set[str] = set()
+    for tag in value:
+        if not isinstance(tag, str) or not tag:
+            raise ValueError("each tag must be a non-empty string")
+        if tag != tag.strip():
+            raise ValueError(f"tag {tag!r} must not start or end with whitespace")
+        normalized = unicodedata.normalize("NFC", tag)
+        if normalized in seen:
+            raise ValueError(f"duplicate tag: {tag}")
+        seen.add(normalized)
+        tags.append(tag)
+    return tuple(tags)
+
+
+def tag_to_slug(tag: str) -> str:
+    normalized = unicodedata.normalize("NFC", tag)
+    if (
+        TAG_PLAIN_SLUG_RE.fullmatch(normalized)
+        and normalized.casefold() not in PORTABLE_RESERVED_NAMES
+    ):
+        return normalized
+    return "~" + normalized.encode("utf-8").hex()
+
+
+def build_tag_slug_map(posts: list[dict]) -> dict[str, str]:
+    tag_slugs: dict[str, str] = {}
+    slug_owners: dict[str, str] = {}
+    for post in posts:
+        for tag in post["tags"]:
+            if tag in tag_slugs:
+                continue
+            slug = tag_to_slug(tag)
+            portable_slug = slug.casefold()
+            previous = slug_owners.get(portable_slug)
+            if previous is not None and previous != tag:
+                raise ValueError(
+                    f"tag URL collision: {previous!r} and {tag!r} both map to {slug!r}"
+                )
+            slug_owners[portable_slug] = tag
+            tag_slugs[tag] = slug
+    return tag_slugs
+
+
+def validate_post_output_routes(posts: list[dict], static_dir: Path) -> None:
+    if not static_dir.is_dir():
+        return
+    static_routes = {path.name.casefold(): path.name for path in static_dir.iterdir()}
+    for post in posts:
+        collision = static_routes.get(post["slug"].casefold())
+        if collision is not None:
+            raise ValueError(
+                f"post slug {post['slug']!r} conflicts with static/{collision}"
+            )
+
+
 def collect_posts() -> list[dict]:
     posts: list[dict] = []
     seen_slugs: set[str] = set()
@@ -294,7 +380,10 @@ def collect_posts() -> list[dict]:
         if meta is None:
             continue
 
-        slug = meta.get("slug")
+        try:
+            slug = validate_post_slug(meta.get("slug"))
+        except ValueError as exc:
+            raise ValueError(f"{source_file.relative_to(ROOT_DIR)}: {exc}") from exc
         title = meta.get("title")
         try:
             create = parse_calver(meta.get("create"))
@@ -305,14 +394,15 @@ def collect_posts() -> list[dict]:
         except ValueError as exc:
             raise ValueError(f"{source_file.relative_to(ROOT_DIR)}: update {exc}") from exc
         description = meta.get("description")
-        tags = tuple(meta.get("tags", []))
+        try:
+            tags = validate_post_tags(meta.get("tags", []))
+        except ValueError as exc:
+            raise ValueError(f"{source_file.relative_to(ROOT_DIR)}: {exc}") from exc
         draft_value = meta.get("draft", True)
         if not isinstance(draft_value, bool):
             raise ValueError(f"{source_file.relative_to(ROOT_DIR)}: draft must be true or false")
         draft = draft_value
 
-        if not slug:
-            raise ValueError(f"{source_file.relative_to(ROOT_DIR)}: slug is required")
         if slug in seen_slugs:
             raise ValueError(f"duplicate slug: {slug}")
         seen_slugs.add(slug)
@@ -342,33 +432,47 @@ def collect_posts() -> list[dict]:
     return posts
 
 
-def write_generated_posts(posts: list[dict]) -> None:
+def write_generated_posts(posts: list[dict], tag_slugs: dict[str, str]) -> None:
     GENERATED_POSTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     published_posts = [post for post in posts if not post["draft"]]
-    if not published_posts:
-        GENERATED_POSTS_FILE.write_text("#let post-data = (:)\n", encoding="utf-8")
-        return
 
-    lines = ["#let post-data = ("]
-    for post in published_posts:
-        tag_value = (
-            "(" + ", ".join(typst_string(tag) for tag in post["tags"]) + ("," if len(post["tags"]) == 1 else "") + ")"
-            if post["tags"]
-            else "()"
-        )
-        lines.extend(
-            [
-                f"  {typst_string(post['slug'])}: (",
-                f"    title: {typst_string(post['title'])},",
-                f"    create: {format_typst_calver(post['create'])},",
-                f"    update: {format_typst_date(post['update'].as_datetime() if post['update'] else None)},",
-                f"    description: {typst_string(post['description'])},",
-                f"    tags: {tag_value},",
-                f"    source_path: {typst_string(str(post['source_file'].relative_to(ROOT_DIR)))},",
-                "  ),",
-            ]
-        )
-    lines.append(")")
+    lines: list[str] = []
+    if published_posts:
+        lines.append("#let post-data = (")
+        for post in published_posts:
+            tag_value = (
+                "(" + ", ".join(typst_string(tag) for tag in post["tags"]) + ("," if len(post["tags"]) == 1 else "") + ")"
+                if post["tags"]
+                else "()"
+            )
+            source_url_path = quote(
+                post["source_file"].relative_to(ROOT_DIR).as_posix(),
+                safe="/",
+            )
+            lines.extend(
+                [
+                    f"  {typst_string(post['slug'])}: (",
+                    f"    title: {typst_string(post['title'])},",
+                    f"    create: {format_typst_calver(post['create'])},",
+                    f"    update: {format_typst_date(post['update'].as_datetime() if post['update'] else None)},",
+                    f"    description: {typst_string(post['description'])},",
+                    f"    tags: {tag_value},",
+                    f"    source_url_path: {typst_string(source_url_path)},",
+                    "  ),",
+                ]
+            )
+        lines.append(")")
+    else:
+        lines.append("#let post-data = (:)")
+
+    lines.append("")
+    if tag_slugs:
+        lines.append("#let tag-slugs = (")
+        for tag, slug in tag_slugs.items():
+            lines.append(f"  {typst_string(tag)}: {typst_string(slug)},")
+        lines.append(")")
+    else:
+        lines.append("#let tag-slugs = (:)")
     GENERATED_POSTS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -435,15 +539,12 @@ def copy_static_assets() -> None:
     copy_root_static_files()
 
 
-def tag_to_slug(tag: str) -> str:
-    return tag.replace(" ", "-")
-
-
-def _tag_page_content(tag: str, tag_posts: list[dict]) -> str:
+def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
     lines = [
         '#import "/vendor/typst-blog-core/typst/core/tag.typ": tag-page',
         "#show: tag-page.with(",
         f"  tag: {typst_string(tag)},",
+        f"  tag-slug: {typst_string(tag_slug)},",
         "  posts: (",
     ]
     for post in tag_posts:
@@ -467,19 +568,21 @@ def _tag_page_content(tag: str, tag_posts: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _tags_index_content(tags_with_counts: list[tuple[str, int]]) -> str:
+def _tags_index_content(tags_with_counts: list[tuple[str, str, int]]) -> str:
     lines = [
         '#import "/vendor/typst-blog-core/typst/core/tags-index.typ": tags-index-page',
         "#show: tags-index-page.with(",
         "  tags: (",
     ]
-    for tag, count in tags_with_counts:
-        lines.append(f"    {typst_string(tag)}: {count},")
+    for tag, slug, count in tags_with_counts:
+        lines.append(
+            f"    {typst_string(tag)}: (slug: {typst_string(slug)}, count: {count}),"
+        )
     lines += ["  )", ")"]
     return "\n".join(lines) + "\n"
 
 
-def build_tag_pages(posts: list[dict]) -> None:
+def build_tag_pages(posts: list[dict], tag_slugs: dict[str, str]) -> None:
     published = [p for p in posts if not p["draft"]]
 
     tag_posts: dict[str, list[dict]] = {}
@@ -494,12 +597,12 @@ def build_tag_pages(posts: list[dict]) -> None:
     tags_dir.mkdir(parents=True, exist_ok=True)
 
     for i, (tag, tposts) in enumerate(tag_posts.items()):
-        slug = tag_to_slug(tag)
+        slug = tag_slugs[tag]
         tag_output_dir = tags_dir / slug
         tag_output_dir.mkdir(parents=True, exist_ok=True)
 
         temp_file = ROOT_DIR / f"_tag_build_{i}.typ"
-        temp_file.write_text(_tag_page_content(tag, tposts), encoding="utf-8")
+        temp_file.write_text(_tag_page_content(tag, slug, tposts), encoding="utf-8")
 
         print(f"Building tag page: #{tag}")
         try:
@@ -515,7 +618,7 @@ def build_tag_pages(posts: list[dict]) -> None:
             temp_file.unlink(missing_ok=True)
 
     tags_with_counts = sorted(
-        [(tag, len(tposts)) for tag, tposts in tag_posts.items()],
+        [(tag, tag_slugs[tag], len(tposts)) for tag, tposts in tag_posts.items()],
         key=lambda x: x[0].lower(),
     )
     temp_file = ROOT_DIR / "_tags_index_build.typ"
@@ -630,16 +733,18 @@ def build(
     configure(root_dir, base_path)
     print("Starting build...")
 
+    site = load_site_config()
+    posts = collect_posts()
+    tag_slugs = build_tag_slug_map(posts)
+    validate_post_output_routes(posts, USER_STATIC_DIR)
+    published_count = sum(1 for post in posts if not post["draft"])
+    print(f"Found {len(posts)} posts ({published_count} published).")
+
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    site = load_site_config()
-    posts = collect_posts()
-    published_count = sum(1 for post in posts if not post["draft"])
-    print(f"Found {len(posts)} posts ({published_count} published).")
-
-    write_generated_posts(posts)
+    write_generated_posts(posts, tag_slugs)
 
     for post in posts:
         if post["draft"]:
@@ -651,7 +756,7 @@ def build(
     build_static_pages()
 
     print("Building tag pages...")
-    build_tag_pages(posts)
+    build_tag_pages(posts, tag_slugs)
 
     print("Generating RSS and sitemap...")
     generate_rss(site, posts)

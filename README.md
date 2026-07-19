@@ -45,6 +45,17 @@ public `base_url` from `site.typ`.
 python3 vendor/typst-blog-core/build.py --preview
 ```
 
+## URL Route Rules
+
+Post slugs are validated as lowercase ASCII words separated by single hyphens.
+Generated route names and names that are unsafe on common filesystems are
+rejected before anything is written outside the expected post directory.
+
+Tag display names may contain Unicode, whitespace, and symbols. The build owns
+their URL-segment encoding and passes the resulting mapping to every Typst page,
+so tag output directories, links, and canonical URLs cannot drift apart. It also
+rejects duplicate tags and collisions on case-insensitive filesystems.
+
 ## Release Tags
 
 Blog repositories should pin this submodule to a release tag instead of

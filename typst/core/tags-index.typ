@@ -36,11 +36,10 @@
           })
 
           html.div(class: "tag-index-list", {
-            for (tag, count) in tags.pairs() {
-              let tag-slug = tag.replace(" ", "-")
-              html.a(class: "tag-index-item", href: base-path + "/tags/" + tag-slug + "/", {
+            for (tag, tag-data) in tags.pairs() {
+              html.a(class: "tag-index-item", href: base-path + "/tags/" + tag-data.slug + "/", {
                 html.span(class: "tag", "#" + tag)
-                html.span(class: "tag-count", str(count))
+                html.span(class: "tag-count", str(tag-data.count))
               })
             }
           })

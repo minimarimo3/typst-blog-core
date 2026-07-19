@@ -6,10 +6,10 @@
 
 #let tag-page(
   tag: "",
+  tag-slug: "",
   posts: (:),
   body,
 ) = context {
-  let tag-slug = tag.replace(" ", "-")
   let page-title = "#" + tag + " | " + site.title
   set document(title: page-title, author: site.author.name)
   set text(lang: site.language)
