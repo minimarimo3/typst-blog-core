@@ -70,7 +70,11 @@
 
   // base-path をメタタグに埋め込む（検索モジュールが Pagefind のパス解決に使う）
   html.meta(name: "base-path", content: base-path)
-  html.link(rel: "stylesheet", href: base-path + "/style.css")
+  html.link(rel: "stylesheet", href: base-path + "/styles/base.css")
+  html.link(rel: "stylesheet", href: base-path + "/styles/layout.css")
+  html.link(rel: "stylesheet", href: base-path + "/styles/article.css")
+  html.link(rel: "stylesheet", href: base-path + "/styles/components.css")
+  html.link(rel: "stylesheet", href: base-path + "/styles/pages.css")
   html.link(rel: "stylesheet", href: base-path + "/themes/" + site.at("theme", default: "dark") + ".css")
 
   // theme CSS より後に注入することで CSS 変数を上書き（--font-{key} 形式）
