@@ -98,6 +98,9 @@
   html.elem("style", ":root {\n" + _css-lines.join("\n") + "\n}")
 
   html.elem("script", attrs: (src: base-path + "/script.js", defer: ""))
+  if sys.inputs.at("preview", default: "false") == "true" {
+    html.elem("script", attrs: (src: "/__typst_blog_preview.js", defer: ""))
+  }
   html.elem("link", attrs: (rel: "alternate", type: "application/rss+xml", title: site.title, href: base-path + "/feed.xml"))
 
   let token = site.analytics.cloudflare_token

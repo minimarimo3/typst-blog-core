@@ -36,6 +36,15 @@ blog repository root:
 python3 vendor/typst-blog-core/build.py
 ```
 
+Preview mode builds the site for `/`, starts a server at
+`http://localhost:8000`, watches site sources, and reloads open browser pages
+after successful rebuilds. Canonical URLs, RSS, and sitemap keep using the
+public `base_url` from `site.typ`.
+
+```sh
+python3 vendor/typst-blog-core/build.py --preview
+```
+
 ## Release Tags
 
 Blog repositories should pin this submodule to a release tag instead of

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import calendar
 import datetime as dt
+import functools
+import http.server
 import json
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -44,15 +49,27 @@ STATIC_EXTENSIONS = {
 }
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
 THEME_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
+BASE_PATH_OVERRIDE: str | None = None
+PREVIEW_HOST = "127.0.0.1"
+PREVIEW_PORT = 8000
+PREVIEW_PORT_ATTEMPTS = 10
+PREVIEW_VERSION_PATH = "/__typst_blog_preview_version"
+PREVIEW_SCRIPT_PATH = "/__typst_blog_preview.js"
+PREVIEW_WATCH_SUFFIXES = STATIC_EXTENSIONS | {".css", ".typ"}
+PREVIEW_IGNORED_DIRS = {".git", "__pycache__", "public"}
 
 
-def configure(root_dir: Path | str | None = None) -> None:
-    global ROOT_DIR, OUTPUT_DIR, GENERATED_POSTS_FILE, USER_STATIC_DIR
+def configure(
+    root_dir: Path | str | None = None,
+    base_path: str | None = None,
+) -> None:
+    global ROOT_DIR, OUTPUT_DIR, GENERATED_POSTS_FILE, USER_STATIC_DIR, BASE_PATH_OVERRIDE
 
     ROOT_DIR = Path(root_dir).resolve() if root_dir is not None else Path.cwd().resolve()
     OUTPUT_DIR = ROOT_DIR / "public"
     GENERATED_POSTS_FILE = ROOT_DIR / "typst" / "generated" / "posts.typ"
     USER_STATIC_DIR = ROOT_DIR / "static"
+    BASE_PATH_OVERRIDE = base_path
 
 
 @dataclass(frozen=True, order=True)
@@ -96,9 +113,15 @@ def run_typst(*args: str, capture_output: bool = False) -> subprocess.CompletedP
         raise
 """
 def run_typst(*args: str, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+    command = ["typst", *args]
+    if BASE_PATH_OVERRIDE is not None:
+        command[2:2] = [
+            "--input", f"base-path={BASE_PATH_OVERRIDE}",
+            "--input", "preview=true",
+        ]
     try:
         return subprocess.run(
-            ["typst", *args],
+            command,
             cwd=ROOT_DIR,
             check=True,
             text=True,
@@ -600,8 +623,11 @@ def generate_sitemap(site: dict, posts: list[dict]) -> None:
     sitemap_path.write_text(xml, encoding="utf-8")
 
 
-def build(root_dir: Path | str | None = None) -> None:
-    configure(root_dir)
+def build(
+    root_dir: Path | str | None = None,
+    base_path: str | None = None,
+) -> None:
+    configure(root_dir, base_path)
     print("Starting build...")
 
     if OUTPUT_DIR.exists():
@@ -634,9 +660,170 @@ def build(root_dir: Path | str | None = None) -> None:
     print("Build complete.")
 
 
+class _PreviewState:
+    def __init__(self) -> None:
+        self._version = 1
+        self._lock = threading.Lock()
+
+    def version(self) -> int:
+        with self._lock:
+            return self._version
+
+    def mark_rebuilt(self) -> None:
+        with self._lock:
+            self._version += 1
+
+
+class _PreviewRequestHandler(http.server.SimpleHTTPRequestHandler):
+    preview_state: _PreviewState
+
+    def do_GET(self) -> None:
+        path = self.path.partition("?")[0]
+        if path == PREVIEW_VERSION_PATH:
+            self._send_preview_content(str(self.preview_state.version()), "text/plain; charset=utf-8")
+            return
+        if path == PREVIEW_SCRIPT_PATH:
+            self._send_preview_content(_preview_reload_script(), "text/javascript; charset=utf-8")
+            return
+        super().do_GET()
+
+    def _send_preview_content(self, content: str, content_type: str) -> None:
+        body = content.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        if self.path.partition("?")[0] != PREVIEW_VERSION_PATH:
+            super().log_message(format, *args)
+
+
+def _preview_reload_script() -> str:
+    return f"""(() => {{
+  let currentVersion;
+
+  async function checkForUpdate() {{
+    try {{
+      const response = await fetch(\"{PREVIEW_VERSION_PATH}\", {{ cache: \"no-store\" }});
+      const nextVersion = await response.text();
+      if (currentVersion === undefined) {{
+        currentVersion = nextVersion;
+      }} else if (nextVersion !== currentVersion) {{
+        window.location.reload();
+        return;
+      }}
+    }} catch (_) {{
+      // The rebuild or preview server may be temporarily unavailable.
+    }}
+    window.setTimeout(checkForUpdate, 750);
+  }}
+
+  checkForUpdate();
+}})();
+"""
+
+
+def _preview_snapshot() -> dict[str, tuple[int, int]]:
+    snapshot: dict[str, tuple[int, int]] = {}
+    for path in ROOT_DIR.rglob("*"):
+        try:
+            if not path.is_file():
+                continue
+            relative = path.relative_to(ROOT_DIR)
+            if any(part in PREVIEW_IGNORED_DIRS for part in relative.parts):
+                continue
+            if relative.parts[:2] == ("typst", "generated"):
+                continue
+            if (
+                path.suffix.lower() not in PREVIEW_WATCH_SUFFIXES
+                and relative.name != "build.py"
+                and relative.parts[:1] != ("static",)
+            ):
+                continue
+            stat = path.stat()
+        except OSError:
+            # Editors may replace files atomically while a snapshot is running.
+            continue
+        snapshot[relative.as_posix()] = (stat.st_mtime_ns, stat.st_size)
+    return snapshot
+
+
+def _watch_preview(state: _PreviewState) -> None:
+    snapshot = _preview_snapshot()
+    while True:
+        time.sleep(0.5)
+        next_snapshot = _preview_snapshot()
+        if next_snapshot == snapshot:
+            continue
+
+        # Give editors that save through multiple file operations a moment to settle.
+        time.sleep(0.2)
+        snapshot = _preview_snapshot()
+        print("Change detected. Rebuilding preview...")
+        try:
+            build(root_dir=ROOT_DIR, base_path="")
+        except Exception as exc:
+            print(f"Preview rebuild failed: {exc}", file=sys.stderr)
+        else:
+            state.mark_rebuilt()
+            print("Preview updated.")
+
+
+def preview(root_dir: Path | str | None = None) -> None:
+    build(root_dir=root_dir, base_path="")
+
+    state = _PreviewState()
+    _PreviewRequestHandler.preview_state = state
+    handler = functools.partial(_PreviewRequestHandler, directory=str(OUTPUT_DIR))
+    server = None
+    last_error = None
+    for port in range(PREVIEW_PORT, PREVIEW_PORT + PREVIEW_PORT_ATTEMPTS):
+        try:
+            server = http.server.ThreadingHTTPServer((PREVIEW_HOST, port), handler)
+            break
+        except OSError as exc:
+            last_error = exc
+    if server is None:
+        raise RuntimeError(
+            f"Could not start preview server on ports {PREVIEW_PORT}-"
+            f"{PREVIEW_PORT + PREVIEW_PORT_ATTEMPTS - 1}: {last_error}"
+        ) from last_error
+
+    watcher = threading.Thread(target=_watch_preview, args=(state,), daemon=True)
+    watcher.start()
+    selected_port = server.server_address[1]
+    if selected_port != PREVIEW_PORT:
+        print(f"Port {PREVIEW_PORT} is in use; using {selected_port} instead.")
+    print(f"Preview server: http://localhost:{selected_port}")
+    print("Watching for changes. Press Ctrl+C to stop.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nPreview stopped.")
+    finally:
+        server.server_close()
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build a Typst blog.")
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="build, serve, watch, and live-reload the site locally",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     try:
-        build()
+        args = _parse_args()
+        if args.preview:
+            preview()
+        else:
+            build()
     except Exception as exc:
         print(f"Build failed: {exc}", file=sys.stderr)
         sys.exit(1)
