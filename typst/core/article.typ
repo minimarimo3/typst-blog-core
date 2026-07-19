@@ -6,7 +6,6 @@
 #let tag-slugs = dictionary(generated-posts).at("tag-slugs", default: (:))
 #import "../components/head.typ": common-head
 #import "../components/widgets.typ": widget-author, widget-search
-#import "@preview/suiji:0.5.0": *
 
 #let env(..items) = context {
   heading(outlined: false, numbering: none, i18n.writing_env)
@@ -453,43 +452,6 @@
                   )
                 })
               }
-            })
-          }
-
-          let other-posts = post-data
-            .pairs()
-            .filter(p => p.first() != slug)
-          if other-posts.len() > 0 {
-            html.hr(class: "section-divider")
-
-            html.elem("aside", attrs: (class: "related-posts", "aria-labelledby": "related-posts-heading", "data-pagefind-ignore": "all", "data-nosnippet": ""), {
-              html.elem("h2", attrs: (id: "related-posts-heading", class: "section-title"), i18n.other_articles)
-              let seed-src = slug + title
-              let seed = int(seed-src.clusters().map(str.to-unicode).map(str).join().slice(0, calc.min(14, seed-src.clusters().len())))
-              let rng = gen-rng(seed)
-              let (_, indices) = shuffle-f(rng, range(other-posts.len()))
-              let picks = indices.slice(0, calc.min(3, indices.len())).map(i => other-posts.at(i))
-
-              html.div(class: "card-grid", {
-                for pair in picks {
-                  let (other-slug, post) = pair
-                  let url = base-path + "/" + other-slug + "/"
-                  html.a(class: "post-card", href: url, {
-                    html.div(class: "card-content", {
-                      if "create" in post {
-                        html.elem("time", attrs: (class: "card-date", datetime: calver-iso(post.create)), calver-display(post.create))
-                      }
-                      if post.at("draft", default: false) {
-                        html.span(class: "draft-badge", i18n.draft)
-                      }
-                      html.h3(class: "card-title", post.title)
-                      if "description" in post {
-                        html.p(class: "card-desc", post.description)
-                      }
-                    })
-                  })
-                }
-              })
             })
           }
 
