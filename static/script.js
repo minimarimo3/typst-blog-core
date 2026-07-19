@@ -223,9 +223,23 @@ document.addEventListener("DOMContentLoaded", () => {
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".raw-html-embed").forEach((el) => {
     const htmlContent = el.getAttribute("data-html");
-    if (htmlContent) {
-      el.outerHTML = htmlContent;
-    }
+    if (!htmlContent) return;
+
+    const template = document.createElement("template");
+    template.innerHTML = htmlContent;
+
+    template.content.querySelectorAll("script").forEach((oldScript) => {
+      const newScript = document.createElement("script");
+
+      for (const attr of oldScript.attributes) {
+        newScript.setAttribute(attr.name, attr.value);
+      }
+
+      newScript.textContent = oldScript.textContent;
+      oldScript.replaceWith(newScript);
+    });
+
+    el.replaceWith(template.content);
   });
 });
 
