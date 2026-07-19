@@ -425,13 +425,25 @@
                   html.elem("h3", attrs: (id: "share-heading"), i18n.share)
                   html.div(class: "share-buttons", {
                     if site.share.x {
-                      html.elem("button", attrs: (class: "share-btn btn-x", onclick: "shareX()"), i18n.post_on_x)
+                      html.elem(
+                        "button",
+                        attrs: (class: "share-btn btn-x", type: "button", "data-article-action": "share-x"),
+                        i18n.post_on_x,
+                      )
                     }
                     if site.share.misskey {
-                      html.elem("button", attrs: (class: "share-btn btn-misskey", onclick: "shareMisskey()"), i18n.note_on_misskey)
+                      html.elem(
+                        "button",
+                        attrs: (class: "share-btn btn-misskey", type: "button", "data-article-action": "share-misskey"),
+                        i18n.note_on_misskey,
+                      )
                     }
                     if site.share.copy {
-                      html.elem("button", attrs: (class: "share-btn btn-copy", onclick: "copyInfo()"), i18n.copy_info)
+                      html.elem(
+                        "button",
+                        attrs: (class: "share-btn btn-copy", type: "button", "data-article-action": "copy-info"),
+                        i18n.copy_info,
+                      )
                     }
                   })
                 })
@@ -446,7 +458,10 @@
                     "button",
                     attrs: (
                       class: "feedback-link",
-                      onclick: "openFeedback('" + site.feedback.google_form_url + "', '" + feedback-entry-id + "')",
+                      type: "button",
+                      "data-article-action": "open-feedback",
+                      "data-feedback-url": site.feedback.google_form_url,
+                      "data-feedback-entry-id": feedback-entry-id,
                     ),
                     i18n.feedback_send,
                   )

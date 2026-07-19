@@ -68,7 +68,7 @@
     )
   }
 
-  // base-path をメタタグに埋め込む（script.js が pagefind のパス解決に使う）
+  // base-path をメタタグに埋め込む（検索モジュールが Pagefind のパス解決に使う）
   html.meta(name: "base-path", content: base-path)
   html.link(rel: "stylesheet", href: base-path + "/style.css")
   html.link(rel: "stylesheet", href: base-path + "/themes/" + site.at("theme", default: "dark") + ".css")
@@ -77,7 +77,7 @@
   let _css-lines = font-css-lines(site.fonts)
   html.elem("style", ":root {\n" + _css-lines.join("\n") + "\n}")
 
-  html.elem("script", attrs: (src: base-path + "/script.js", defer: ""))
+  html.elem("script", attrs: (type: "module", src: base-path + "/scripts/main.js"))
   if sys.inputs.at("preview", default: "false") == "true" {
     html.elem("script", attrs: (src: "/__typst_blog_preview.js", defer: ""))
   }
