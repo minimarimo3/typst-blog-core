@@ -1,0 +1,373 @@
+from __future__ import annotations
+
+import calendar
+import datetime as dt
+import json
+import re
+import unicodedata
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import quote
+
+from .context import BlogContext, run_typst
+
+
+SITE_METADATA_LABEL = "<site-meta>"
+POST_METADATA_LABEL = "<post-meta>"
+EXCLUDED_DIRS = {".git", ".github", "public", "typst", "vendor", "__pycache__"}
+CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
+THEME_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
+POST_SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
+GENERATED_ROUTE_NAMES = {"pagefind", "tags", "themes"}
+PORTABLE_RESERVED_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
+RESERVED_POST_SLUGS = GENERATED_ROUTE_NAMES | PORTABLE_RESERVED_NAMES
+RESERVED_POST_DIRS = EXCLUDED_DIRS | {"static"}
+
+
+@dataclass(frozen=True, order=True)
+class CalVer:
+    year: int
+    month: int
+    day: int
+    patch: int = 0
+
+    def as_datetime(self) -> dt.datetime:
+        return dt.datetime(self.year, self.month, self.day, tzinfo=dt.timezone.utc)
+
+
+def load_site_metadata(context: BlogContext) -> dict:
+    result = run_typst(
+        context,
+        "query",
+        "--root",
+        ".",
+        "--features",
+        "html",
+        "--field",
+        "value",
+        "site.typ",
+        SITE_METADATA_LABEL,
+        capture_output=True,
+    )
+    data = json.loads(result.stdout)
+    if not data:
+        raise ValueError("site.typ must include #metadata(site) <site-meta>")
+    return data[0]
+
+
+def resolve_posts_dir(context: BlogContext, site: dict) -> Path:
+    value = site.get("posts_dir", ".")
+    if not isinstance(value, str) or not value:
+        raise ValueError("site.posts_dir must be a non-empty string")
+    if "\\" in value or "\0" in value:
+        raise ValueError("site.posts_dir must use a portable relative path")
+
+    path = PurePosixPath(value)
+    if path.is_absolute() or PureWindowsPath(value).is_absolute() or ".." in path.parts:
+        raise ValueError("site.posts_dir must stay inside the blog root")
+    if path.parts and path.parts[0].casefold() in RESERVED_POST_DIRS:
+        raise ValueError(
+            f"site.posts_dir may not use the managed directory '{path.parts[0]}'"
+        )
+
+    resolved = (context.root_dir / Path(*path.parts)).resolve()
+    if not resolved.is_relative_to(context.root_dir):
+        raise ValueError("site.posts_dir must stay inside the blog root")
+    return resolved
+
+
+def load_site_config(context: BlogContext) -> dict:
+    site = load_site_metadata(context)
+
+    for field in ("title", "description", "base_url", "language"):
+        if not site.get(field):
+            raise ValueError(f"site.{field} is required")
+
+    theme = site.get("theme", "dark")
+    if not isinstance(theme, str) or not theme:
+        raise ValueError("site.theme must be a non-empty string")
+    if not THEME_NAME_RE.fullmatch(theme):
+        raise ValueError("site.theme may only contain letters, numbers, underscores, and hyphens")
+    theme_paths = (
+        context.user_static_dir / "themes" / f"{theme}.css",
+        context.core_static_dir / "themes" / f"{theme}.css",
+    )
+    if not any(path.is_file() for path in theme_paths):
+        raise ValueError(
+            f"site.theme '{theme}' does not exist in static/themes "
+            "or vendor/typst-blog-core/static/themes"
+        )
+
+    site["base_url"] = site["base_url"].rstrip("/")
+    site["theme"] = theme
+    return site
+
+
+def normalize_calver_year(year: int) -> int:
+    return 2000 + year if year < 100 else year
+
+
+def make_calver(year: int, month: int, day: int, patch: int = 0) -> CalVer:
+    if year < 0:
+        raise ValueError("CalVer year must be 0 or greater")
+    year = normalize_calver_year(year)
+    if not 1 <= month <= 12:
+        raise ValueError("CalVer month must be between 1 and 12")
+    if not 1 <= day <= calendar.monthrange(year, month)[1]:
+        raise ValueError("CalVer day is not a valid day for the year and month")
+    if patch < 0:
+        raise ValueError("CalVer patch must be 0 or greater")
+    return CalVer(year, month, day, patch)
+
+
+def parse_calver(raw: object) -> CalVer | None:
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, dict):
+        try:
+            return make_calver(
+                int(raw["year"]),
+                int(raw["month"]),
+                int(raw["day"]),
+                int(raw.get("patch", 0)),
+            )
+        except KeyError as exc:
+            raise ValueError("CalVer must include year, month, and day") from exc
+    if not isinstance(raw, str):
+        raise ValueError("CalVer must be a calver(...) value or YYYY.MM.DD[.PATCH] string")
+    match = CALVER_TEXT_RE.fullmatch(raw.strip())
+    if not match:
+        raise ValueError("CalVer must be YYYY.MM.DD or YYYY.MM.DD.PATCH")
+    return make_calver(
+        int(match.group(1)),
+        int(match.group(2)),
+        int(match.group(3)),
+        int(match.group(4) or 0),
+    )
+
+
+def typst_string(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def format_typst_date(value: dt.datetime | None) -> str:
+    if value is None:
+        return "none"
+    return f"datetime(year: {value.year}, month: {value.month}, day: {value.day})"
+
+
+def format_typst_calver(value: CalVer) -> str:
+    return f"(year: {value.year}, month: {value.month}, day: {value.day}, patch: {value.patch})"
+
+
+def discover_post_files(
+    context: BlogContext,
+    posts_dir: Path | None = None,
+) -> list[Path]:
+    post_files: list[Path] = []
+    search_root = posts_dir or context.root_dir
+    if not search_root.is_dir():
+        return post_files
+    for path in search_root.rglob("index.typ"):
+        if path == context.root_dir / "index.typ":
+            continue
+        if any(part in EXCLUDED_DIRS for part in path.relative_to(context.root_dir).parts):
+            continue
+        post_files.append(path)
+    return sorted(post_files)
+
+
+def load_post_metadata(context: BlogContext, path: Path) -> dict | None:
+    result = run_typst(
+        context,
+        "query",
+        "--root",
+        ".",
+        "--features",
+        "html",
+        "--field",
+        "value",
+        str(path.relative_to(context.root_dir)),
+        POST_METADATA_LABEL,
+        capture_output=True,
+    )
+    data = json.loads(result.stdout)
+    return data[0] if data else None
+
+
+def validate_post_slug(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError("slug is required and must be a string")
+    if not POST_SLUG_RE.fullmatch(value):
+        raise ValueError(
+            "slug must contain only lowercase ASCII letters, numbers, and single hyphens "
+            "between words (example: my-first-post)"
+        )
+    if value in RESERVED_POST_SLUGS:
+        raise ValueError(f"slug '{value}' is reserved for site output")
+    return value
+
+
+def validate_post_tags(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise ValueError("tags must be an array of strings")
+    tags: list[str] = []
+    seen: set[str] = set()
+    for tag in value:
+        if not isinstance(tag, str) or not tag:
+            raise ValueError("each tag must be a non-empty string")
+        if tag != tag.strip():
+            raise ValueError(f"tag {tag!r} must not start or end with whitespace")
+        normalized = unicodedata.normalize("NFC", tag)
+        if normalized in seen:
+            raise ValueError(f"duplicate tag: {tag}")
+        seen.add(normalized)
+        tags.append(tag)
+    return tuple(tags)
+
+
+def tag_to_slug(tag: str) -> str:
+    normalized = unicodedata.normalize("NFC", tag)
+    if (
+        TAG_PLAIN_SLUG_RE.fullmatch(normalized)
+        and normalized.casefold() not in PORTABLE_RESERVED_NAMES
+    ):
+        return normalized
+    return "~" + normalized.encode("utf-8").hex()
+
+
+def build_tag_slug_map(posts: list[dict]) -> dict[str, str]:
+    tag_slugs: dict[str, str] = {}
+    slug_owners: dict[str, str] = {}
+    for post in posts:
+        for tag in post["tags"]:
+            if tag in tag_slugs:
+                continue
+            slug = tag_to_slug(tag)
+            portable_slug = slug.casefold()
+            previous = slug_owners.get(portable_slug)
+            if previous is not None and previous != tag:
+                raise ValueError(
+                    f"tag URL collision: {previous!r} and {tag!r} both map to {slug!r}"
+                )
+            slug_owners[portable_slug] = tag
+            tag_slugs[tag] = slug
+    return tag_slugs
+
+
+def validate_post_output_routes(posts: list[dict], static_dir: Path) -> None:
+    if not static_dir.is_dir():
+        return
+    static_routes = {path.name.casefold(): path.name for path in static_dir.iterdir()}
+    for post in posts:
+        collision = static_routes.get(post["slug"].casefold())
+        if collision is not None:
+            raise ValueError(f"post slug {post['slug']!r} conflicts with static/{collision}")
+
+
+def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[dict]:
+    posts: list[dict] = []
+    seen_slugs: set[str] = set()
+    for source_file in discover_post_files(context, posts_dir):
+        meta = load_post_metadata(context, source_file)
+        if meta is None:
+            continue
+        relative = source_file.relative_to(context.root_dir)
+        try:
+            slug = validate_post_slug(meta.get("slug"))
+            create = parse_calver(meta.get("create"))
+            update = parse_calver(meta.get("update"))
+            tags = validate_post_tags(meta.get("tags", []))
+        except ValueError as exc:
+            raise ValueError(f"{relative}: {exc}") from exc
+        title = meta.get("title")
+        description = meta.get("description")
+        draft = meta.get("draft", True)
+        if not isinstance(draft, bool):
+            raise ValueError(f"{relative}: draft must be true or false")
+        if slug in seen_slugs:
+            raise ValueError(f"duplicate slug: {slug}")
+        seen_slugs.add(slug)
+        if not title:
+            raise ValueError(f"{relative}: title is required")
+        if create is None:
+            raise ValueError(f"{relative}: create is required")
+        if not description:
+            raise ValueError(f"{relative}: description is required")
+        posts.append(
+            {
+                "slug": slug,
+                "title": title,
+                "create": create,
+                "update": update,
+                "description": description,
+                "tags": tags,
+                "draft": draft,
+                "source_file": source_file,
+                "source_dir": source_file.parent,
+            }
+        )
+    posts.sort(key=lambda post: post["create"], reverse=True)
+    return posts
+
+
+def write_generated_posts(
+    context: BlogContext,
+    posts: list[dict],
+    tag_slugs: dict[str, str],
+) -> None:
+    context.generated_posts_file.parent.mkdir(parents=True, exist_ok=True)
+    published_posts = [post for post in posts if not post["draft"]]
+    lines: list[str] = []
+    if published_posts:
+        lines.append("#let post-data = (")
+        for post in published_posts:
+            tags = post["tags"]
+            tag_value = (
+                "("
+                + ", ".join(typst_string(tag) for tag in tags)
+                + ("," if len(tags) == 1 else "")
+                + ")"
+                if tags
+                else "()"
+            )
+            source_url_path = quote(
+                post["source_file"].relative_to(context.root_dir).as_posix(),
+                safe="/",
+            )
+            update = post["update"]
+            lines.extend(
+                [
+                    f"  {typst_string(post['slug'])}: (",
+                    f"    title: {typst_string(post['title'])},",
+                    f"    create: {format_typst_calver(post['create'])},",
+                    f"    update: {format_typst_date(update.as_datetime() if update else None)},",
+                    f"    description: {typst_string(post['description'])},",
+                    f"    tags: {tag_value},",
+                    f"    source_url_path: {typst_string(source_url_path)},",
+                    "  ),",
+                ]
+            )
+        lines.append(")")
+    else:
+        lines.append("#let post-data = (:)")
+    lines.append("")
+    if tag_slugs:
+        lines.append("#let tag-slugs = (")
+        for tag, slug in tag_slugs.items():
+            lines.append(f"  {typst_string(tag)}: {typst_string(slug)},")
+        lines.append(")")
+    else:
+        lines.append("#let tag-slugs = (:)")
+    context.generated_posts_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
