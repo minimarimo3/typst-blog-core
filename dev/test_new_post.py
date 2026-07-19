@@ -56,20 +56,21 @@ class NewPostTests(unittest.TestCase):
             )
             self.assertIn("draft: false", index_file.read_text(encoding="utf-8"))
 
-    def test_creates_post_with_japanese_slug(self) -> None:
+    def test_creates_post_with_title_like_slug(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            slug = "Zoteroのエクスポート形式にHayagrivaを追加する"
             index_file = create_post(
                 root_dir=directory,
-                slug="日本語の記事",
-                title="日本語の記事",
+                slug=slug,
+                title="Zoteroのエクスポート形式にHayagrivaを追加する",
                 description="説明",
             )
             self.assertEqual(
                 index_file,
-                Path(directory).resolve() / "日本語の記事" / "index.typ",
+                Path(directory).resolve() / slug / "index.typ",
             )
             self.assertIn(
-                'slug: "日本語の記事"',
+                f'slug: "{slug}"',
                 index_file.read_text(encoding="utf-8"),
             )
 

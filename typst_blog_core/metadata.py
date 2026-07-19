@@ -27,8 +27,9 @@ PORTABLE_RESERVED_NAMES = {
     *(f"com{number}" for number in range(1, 10)),
     *(f"lpt{number}" for number in range(1, 10)),
 }
-RESERVED_POST_SLUGS = GENERATED_ROUTE_NAMES | PORTABLE_RESERVED_NAMES
 RESERVED_POST_DIRS = EXCLUDED_DIRS | {"static"}
+WINDOWS_FORBIDDEN_FILENAME_CHARS = frozenset('<>:"/\\|?*')
+MAX_PORTABLE_FILENAME_BYTES = 255
 
 
 @dataclass(frozen=True, order=True)
@@ -205,20 +206,24 @@ def validate_post_slug(value: object) -> str:
     normalized = unicodedata.normalize("NFC", value)
     if normalized != value:
         raise ValueError("slug must use Unicode NFC normalization")
-    words = value.split("-")
+    if value != value.strip():
+        raise ValueError("slug must not start or end with whitespace")
+    if value.startswith(".") or value.endswith("."):
+        raise ValueError("slug must not start or end with a period")
+    if any(character in WINDOWS_FORBIDDEN_FILENAME_CHARS for character in value):
+        raise ValueError('slug must not contain any of <>:"/\\|?*')
     if any(
-        not word
-        or not all(
-            character.isalnum() and character == character.lower()
-            for character in word
-        )
-        for word in words
+        unicodedata.category(character).startswith("C") for character in value
     ):
+        raise ValueError("slug must not contain control or non-portable Unicode characters")
+    if len(value.encode("utf-8")) > MAX_PORTABLE_FILENAME_BYTES:
         raise ValueError(
-            "slug must contain only lowercase Unicode letters, numbers, and single hyphens "
-            "between words (examples: my-first-post, 日本語の記事)"
+            f"slug must be at most {MAX_PORTABLE_FILENAME_BYTES} UTF-8 bytes"
         )
-    if value.casefold() in RESERVED_POST_SLUGS:
+
+    portable_name = value.casefold()
+    windows_stem = portable_name.split(".", 1)[0].rstrip(" ")
+    if portable_name in GENERATED_ROUTE_NAMES or windows_stem in PORTABLE_RESERVED_NAMES:
         raise ValueError(f"slug '{value}' is reserved for site output")
     return value
 

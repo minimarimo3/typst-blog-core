@@ -25,21 +25,48 @@ from typst_blog_core.metadata import (  # noqa: E402
 
 
 class PostSlugTests(unittest.TestCase):
-    def test_accepts_canonical_slug(self) -> None:
+    def test_accepts_safe_human_readable_slugs(self) -> None:
         self.assertEqual(validate_post_slug("my-first-post"), "my-first-post")
         self.assertEqual(validate_post_slug("日本語の記事"), "日本語の記事")
+        title_slug = "Zoteroのエクスポート形式にHayagrivaを追加する"
+        self.assertEqual(validate_post_slug(title_slug), title_slug)
         self.assertEqual(
-            post_slug_to_url_segment("日本語の記事"),
-            "%E6%97%A5%E6%9C%AC%E8%AA%9E%E3%81%AE%E8%A8%98%E4%BA%8B",
+            validate_post_slug("C++ と Rust 100% #1"),
+            "C++ と Rust 100% #1",
+        )
+        self.assertEqual(
+            post_slug_to_url_segment(title_slug),
+            "Zotero%E3%81%AE%E3%82%A8%E3%82%AF%E3%82%B9%E3%83%9D%E3%83%BC%E3%83%88"
+            "%E5%BD%A2%E5%BC%8F%E3%81%ABHayagriva%E3%82%92%E8%BF%BD%E5%8A%A0%E3%81%99"
+            "%E3%82%8B",
         )
 
-    def test_rejects_unsafe_or_ambiguous_slugs(self) -> None:
-        for slug in ("../outside", "two words", "Uppercase", "two--hyphens", "/root", "100%"):
+    def test_rejects_unsafe_or_non_portable_slugs(self) -> None:
+        for slug in (
+            "../outside",
+            "/root",
+            r"folder\child",
+            "bad:name",
+            "bad\nname",
+            " leading-space",
+            "trailing-space ",
+            ".hidden",
+            "trailing.",
+            "a" * 256,
+        ):
             with self.subTest(slug=slug), self.assertRaises(ValueError):
                 validate_post_slug(slug)
 
     def test_rejects_generated_and_portability_reservations(self) -> None:
-        for slug in ("tags", "pagefind", "themes", "con", "lpt1"):
+        for slug in (
+            "tags",
+            "pagefind",
+            "themes",
+            "con",
+            "con.txt",
+            "con .txt",
+            "lpt1",
+        ):
             with self.subTest(slug=slug), self.assertRaises(ValueError):
                 validate_post_slug(slug)
 
