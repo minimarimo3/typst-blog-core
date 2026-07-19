@@ -15,25 +15,27 @@ workflow files. This core repository owns the reusable implementation:
 - Typst templates under `typst/core/`
 - Typst components under `typst/components/`
 - default CSS, themes, JavaScript, and robots.txt under `static/`
-- the build implementation in `build.py`
+- the Python command implementation in `typst_blog_core/`
+- thin direct-entry wrapper in `command.py`
+- compatibility facade in `build.py` for blog repositories using the former wrapper
 - RSS, sitemap, tag page, and generated post metadata logic
 - Pagefind-compatible markup and frontend search integration
 - validation helpers under `dev/`
 
 ## Use From A Blog Repository
 
-The template repository provides a thin root-level `build.py`. It loads this
-core build module and passes the blog repository root as the build root:
+The template repository provides a thin root-level `command.py`. It imports the
+command implementation from this submodule and passes the blog repository root:
 
 ```sh
-python3 build.py
+python3 command.py build
 ```
 
 Direct execution is also supported when the current working directory is the
 blog repository root:
 
 ```sh
-python3 vendor/typst-blog-core/build.py
+python3 vendor/typst-blog-core/command.py build
 ```
 
 Preview mode builds the site for `/`, starts a server at
@@ -42,8 +44,33 @@ after successful rebuilds. Canonical URLs, RSS, and sitemap keep using the
 public `base_url` from `site.typ`.
 
 ```sh
-python3 vendor/typst-blog-core/build.py --preview
+python3 vendor/typst-blog-core/command.py preview
 ```
+
+Create a minimal post directory and `index.typ` with validated metadata using
+the `new` command. New posts are drafts unless `--publish` is supplied.
+
+```sh
+python3 command.py new my-first-post \
+  --title "My First Post" \
+  --description "A short description." \
+  --tag Typst
+```
+
+The Python package is split by responsibility: `cli.py` dispatches commands,
+`new_post.py` creates posts, `metadata.py` validates and collects metadata,
+`builder.py` produces the site, and `preview.py` owns the local server and
+watcher. Updating the pinned submodule therefore updates all command behavior
+without copying Python implementation into the blog repository.
+
+The former core-level `build.py` API remains as a compatibility facade so an
+older blog wrapper can still load `build()` and `preview()` after updating only
+the submodule. New blog repositories should use `command.py`.
+
+Set `posts_dir` in the user-owned `site.typ` when posts should live below a
+dedicated directory. It defaults to `"."`; for example, `posts_dir: "posts"`
+makes both `new` and `build` use the `posts/` tree. Only safe relative paths
+inside the blog root are accepted.
 
 ## URL Route Rules
 
