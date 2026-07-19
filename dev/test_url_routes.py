@@ -13,6 +13,7 @@ from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.metadata import (  # noqa: E402
     build_tag_slug_map,
     discover_post_files,
+    make_calver,
     resolve_posts_dir,
     tag_to_slug,
     validate_post_output_routes,
@@ -75,6 +76,33 @@ class GeneratedRouteDataTests(unittest.TestCase):
             self.assertEqual(
                 context.generated_posts_file.read_text(encoding="utf-8"),
                 "#let post-data = (:)\n\n#let tag-slugs = (:)\n",
+            )
+
+    def test_update_date_uses_calver_data_accepted_by_article_helpers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            source = context.root_dir / "post" / "index.typ"
+            source.parent.mkdir()
+            source.write_text("post", encoding="utf-8")
+            write_generated_posts(
+                context,
+                [
+                    {
+                        "slug": "post",
+                        "title": "Post",
+                        "create": make_calver(2026, 1, 1),
+                        "update": make_calver(2026, 3, 4),
+                        "description": "Description",
+                        "tags": (),
+                        "draft": False,
+                        "source_file": source,
+                    }
+                ],
+                {},
+            )
+            generated = context.generated_posts_file.read_text(encoding="utf-8")
+            self.assertIn(
+                "update: (year: 2026, month: 3, day: 4, patch: 0)", generated
             )
 
 

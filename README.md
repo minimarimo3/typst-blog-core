@@ -72,6 +72,14 @@ dedicated directory. It defaults to `"."`; for example, `posts_dir: "posts"`
 makes both `new` and `build` use the `posts/` tree. Only safe relative paths
 inside the blog root are accepted.
 
+Post update dates use `update_policy: "git"` by default. The build follows the
+history of each post's `index.typ` across renames and combines it with commits
+touching other files in the same post directory. The initial post commit does
+not produce an update date. Set `update_policy: "manual"` to use the `update`
+value authored in each post instead. GitHub Actions checkouts must use full
+history (`fetch-depth: 0`); unavailable or shallow history produces a warning
+and preserves authored update values as a fallback.
+
 ## URL Route Rules
 
 Post slugs are validated as lowercase ASCII words separated by single hyphens.

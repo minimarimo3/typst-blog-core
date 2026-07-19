@@ -108,6 +108,10 @@ def load_site_config(context: BlogContext) -> dict:
 
     site["base_url"] = site["base_url"].rstrip("/")
     site["theme"] = theme
+    update_policy = site.get("update_policy", "git")
+    if update_policy not in {"git", "manual"}:
+        raise ValueError("site.update_policy must be 'git' or 'manual'")
+    site["update_policy"] = update_policy
     return site
 
 
@@ -157,12 +161,6 @@ def parse_calver(raw: object) -> CalVer | None:
 def typst_string(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
-
-
-def format_typst_date(value: dt.datetime | None) -> str:
-    if value is None:
-        return "none"
-    return f"datetime(year: {value.year}, month: {value.month}, day: {value.day})"
 
 
 def format_typst_calver(value: CalVer) -> str:
@@ -352,7 +350,7 @@ def write_generated_posts(
                     f"  {typst_string(post['slug'])}: (",
                     f"    title: {typst_string(post['title'])},",
                     f"    create: {format_typst_calver(post['create'])},",
-                    f"    update: {format_typst_date(update.as_datetime() if update else None)},",
+                    f"    update: {format_typst_calver(update) if update else 'none'},",
                     f"    description: {typst_string(post['description'])},",
                     f"    tags: {tag_value},",
                     f"    source_url_path: {typst_string(source_url_path)},",

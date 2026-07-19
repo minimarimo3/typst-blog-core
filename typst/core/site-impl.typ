@@ -6,6 +6,7 @@
 /// - language (str): サイト言語コード（例: `"ja"`, `"en"`）
 /// - theme (str): テーマ名。英数字・`_`・`-` のみ使用可（例: `"dark"`, `"light"`）
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
+/// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
 /// - default_og_image (str, none): 記事やページに画像指定がないときに使う既定OGP画像 URL
 /// - fonts (dictionary): フォント設定。`main` と `code` キーが必須で、各々 `pdf` フィールドが必要。```typst
 ///   fonts: (
@@ -27,6 +28,7 @@
   language: none,
   theme: "dark",
   posts_dir: ".",
+  update_policy: "git",
   default_og_image: none,
   fonts: none,
   author: none,
@@ -56,6 +58,7 @@
   _req(language, "language")
   assert(default_og_image == none or type(default_og_image) == str, message: "site.default_og_image: none か文字列が必要です")
   _req(posts_dir, "posts_dir")
+  assert(update_policy == "git" or update_policy == "manual", message: "site.update_policy: git または manual が必要です")
 
   // theme（英数字・アンダースコア・ハイフンのみ）
   assert(type(theme) == str and theme != "", message: "site.theme: 空でない文字列が必要です")
@@ -106,7 +109,7 @@
 
   (
     title: title, description: description, base_url: base_url, language: language,
-    theme: theme, posts_dir: posts_dir, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
+    theme: theme, posts_dir: posts_dir, update_policy: update_policy, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
     feedback: feedback, share: share, github_repo: github_repo,
   )
 }

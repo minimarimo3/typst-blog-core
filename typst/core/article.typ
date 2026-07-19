@@ -194,11 +194,13 @@
   assert(slug != none, message: "slug is required")
   assert(create != none, message: "create is required")
   assert(description != none, message: "description is required")
+  let generated-update = post-data.at(slug, default: (:)).at("update", default: none)
+  let effective-update = if site.update_policy == "git" { generated-update } else { update }
   let abstract-content = if abstract != none { abstract } else { description }
   let article-page-url = _article-url(slug)
   let article-image-url = _article-image-url(og-image, article-page-url)
-  let modified = if update == none { create } else { update }
-  let article-json-ld = _article-json-ld(title, description, document-authors, create, update, slug, article-image-url)
+  let modified = if effective-update == none { create } else { effective-update }
+  let article-json-ld = _article-json-ld(title, description, document-authors, create, effective-update, slug, article-image-url)
 
   let note-counter = counter("my-footnote")
   let footnotes = state("article-footnotes-" + slug, ())
@@ -290,16 +292,16 @@
                         "time",
                         attrs: (
                           datetime: calver-iso(create),
-                          itemprop: if update == none { "datePublished dateModified" } else { "datePublished" },
+                          itemprop: if effective-update == none { "datePublished dateModified" } else { "datePublished" },
                         ),
                         calver-display(create),
                       )
                     })
                   }
-                  if update != none {
+                  if effective-update != none {
                     html.span(class: "meta-date", {
                       i18n.updated
-                      html.elem("time", attrs: (datetime: calver-iso(update), itemprop: "dateModified"), calver-display(update))
+                      html.elem("time", attrs: (datetime: calver-iso(effective-update), itemprop: "dateModified"), calver-display(effective-update))
                     })
                   }
                 })

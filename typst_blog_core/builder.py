@@ -6,6 +6,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from .context import BlogContext, ROOT_STATIC_FILES, STATIC_EXTENSIONS, run_typst
+from .git_dates import apply_update_policy
 from .metadata import (
     build_tag_slug_map,
     collect_posts,
@@ -266,6 +267,7 @@ def build(
     site = load_site_config(context)
     posts_dir = resolve_posts_dir(context, site)
     posts = collect_posts(context, posts_dir)
+    apply_update_policy(context, site, posts)
     tag_slugs = build_tag_slug_map(posts)
     validate_post_output_routes(posts, context.user_static_dir)
     published_count = sum(1 for post in posts if not post["draft"])
