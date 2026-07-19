@@ -230,22 +230,58 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-  const footnoteWrappers = document.querySelectorAll(".footnote-wrapper");
+  const footnoteMarkers = document.querySelectorAll('.footnote-marker[role="doc-noteref"]');
+  if (footnoteMarkers.length === 0) return;
 
-  footnoteWrappers.forEach((wrapper) => {
-    wrapper.addEventListener("click", (event) => {
-      footnoteWrappers.forEach((item) => {
-        if (item !== wrapper) item.classList.remove("is-active");
-      });
-      wrapper.classList.toggle("is-active");
-      event.stopPropagation();
-    });
-  });
+  const popover = document.createElement("div");
+  popover.id = "footnote-popover";
+  popover.className = "footnote-popover";
+  popover.setAttribute("role", "tooltip");
+  popover.hidden = true;
+  document.body.append(popover);
+  let activeMarker = null;
 
-  document.addEventListener("click", () => {
-    footnoteWrappers.forEach((wrapper) => {
-      wrapper.classList.remove("is-active");
-    });
+  const hidePopover = () => {
+    activeMarker?.removeAttribute("aria-describedby");
+    activeMarker = null;
+    popover.hidden = true;
+    popover.replaceChildren();
+  };
+
+  const showPopover = (marker) => {
+    const href = marker.getAttribute("href");
+    if (!href || !href.startsWith("#")) return;
+
+    const note = document.getElementById(decodeURIComponent(href.slice(1)));
+    const body = note?.querySelector(".footnote-body");
+    if (!body) return;
+
+    popover.replaceChildren(body.cloneNode(true));
+    popover.hidden = false;
+    activeMarker?.removeAttribute("aria-describedby");
+    activeMarker = marker;
+    activeMarker.setAttribute("aria-describedby", popover.id);
+
+    const markerRect = marker.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const gap = 8;
+    const viewportPadding = 10;
+    const left = Math.min(
+      window.innerWidth - popoverRect.width - viewportPadding,
+      Math.max(viewportPadding, markerRect.left + markerRect.width / 2 - popoverRect.width / 2),
+    );
+    const above = markerRect.top - popoverRect.height - gap;
+    const top = above >= viewportPadding ? above : markerRect.bottom + gap;
+
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+  };
+
+  footnoteMarkers.forEach((marker) => {
+    marker.addEventListener("mouseenter", () => showPopover(marker));
+    marker.addEventListener("mouseleave", hidePopover);
+    marker.addEventListener("focus", () => showPopover(marker));
+    marker.addEventListener("blur", hidePopover);
   });
 });
 
@@ -330,10 +366,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const href = link.getAttribute("href");
     const entry = document.getElementById(fragmentToId(href));
     if (!entry) return;
-
-    document.querySelectorAll(".footnote-wrapper.is-active").forEach((wrapper) => {
-      wrapper.classList.remove("is-active");
-    });
 
     body.replaceChildren(cloneBibliographyEntry(entry));
     title.textContent = `参考文献 ${link.textContent.trim()}`;

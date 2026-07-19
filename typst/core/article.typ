@@ -199,13 +199,27 @@
   let article-json-ld = _article-json-ld(title, description, document-authors, create, update, slug, article-image-url)
 
   let note-counter = counter("my-footnote")
+  let footnotes = state("article-footnotes-" + slug, ())
   show footnote: it => {
-    note-counter.step()
-    let num = note-counter.get().first() + 1
-    html.span(class: "footnote-wrapper", {
-      html.span(class: "footnote-marker", "※" + str(num))
-      html.span(class: "footnote-content", it.body)
-    })
+    context {
+      note-counter.step()
+      let num = note-counter.get().first() + 1
+      let note-id = "footnote-" + str(num)
+      let reference-id = "footnote-reference-" + str(num)
+      footnotes.update(notes => notes + ((number: num, body: it.body),))
+      html.elem("sup", attrs: (class: "footnote-wrapper"), {
+        html.elem(
+          "a",
+          attrs: (
+            id: reference-id,
+            class: "footnote-marker",
+            href: "#" + note-id,
+            role: "doc-noteref",
+          ),
+          "※" + str(num),
+        )
+      })
+    }
   }
 
   if sys.version < version(0, 15, 0) {
@@ -337,7 +351,50 @@
               )
             }
 
-            html.elem("div", attrs: (class: "article-body", itemprop: "articleBody"), body)
+            html.elem("div", attrs: (class: "article-body", itemprop: "articleBody"), {
+              body
+
+              context {
+                let notes = footnotes.final()
+                if notes.len() > 0 {
+                  html.elem(
+                    "section",
+                    attrs: (
+                      class: "footnotes",
+                      role: "doc-endnotes",
+                      "aria-labelledby": "footnotes-heading",
+                    ),
+                    {
+                      html.elem("h2", attrs: (id: "footnotes-heading", class: "footnotes-heading"), i18n.footnotes)
+                      html.elem("ol", attrs: (class: "footnotes-list"), {
+                        for note in notes {
+                          let note-id = "footnote-" + str(note.number)
+                          let reference-id = "footnote-reference-" + str(note.number)
+                          html.elem(
+                            "li",
+                            attrs: (id: note-id, role: "doc-endnote"),
+                            {
+                              html.div(class: "footnote-body", note.body)
+                              [ ]
+                              html.elem(
+                                "a",
+                                attrs: (
+                                  class: "footnote-backlink",
+                                  href: "#" + reference-id,
+                                  role: "doc-backlink",
+                                  "aria-label": i18n.back_to_footnote_reference,
+                                ),
+                                "↩",
+                              )
+                            },
+                          )
+                        }
+                      })
+                    },
+                  )
+                }
+              }
+            })
           })
 
           if share-enabled or feedback-enabled {
