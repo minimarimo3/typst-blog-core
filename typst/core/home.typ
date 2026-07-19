@@ -1,8 +1,9 @@
 #import "/site.typ": site
-#import "shared.typ": calver-display, calver-iso, calver-key, export-target, main-font, heading-font, base-path
-#import "i18n.typ": i18n
+#import "shared.typ": export-target, main-font, heading-font
 #import "../components/head.typ": common-head
-#import "../components/widgets.typ": widget-author, widget-about, widget-search
+#import "../components/page-layout.typ": page-layout
+#import "../components/post-cards.typ": post-card-grid
+#import "../components/widgets.typ": widget-mobile-search, widget-site-sidebar
 
 #let home(
   title: none,
@@ -26,65 +27,21 @@
     return
   }
 
-  html.html(lang: site.language, {
-    html.head({
+  page-layout(
+    head-content: {
       common-head(page-title, description: page-description, image: og-image, url: "/")
-    })
-    html.body({
-      html.div(class: "site-container", {
-        html.main(class: "main-content", {
-          html.header(class: "article-header", {
-            html.h1(class: "article-title", page-title)
-            if page-description != "" {
-              html.p(style: "color: var(--text-muted);", page-description)
-            }
-          })
-
-          html.div(class: "mobile-search", {
-            widget-search()
-          })
-
-          html.div(class: "card-grid home-card-grid", {
-            let posts-list = if posts != none {
-              posts
-                .pairs()
-                .map(pair => {
-                  let (key, val) = pair
-                  val + (url: base-path + "/" + key + "/")
-                })
-                .sorted(key: p => calver-key(p.create))
-                .rev()
-            } else {
-              ()
-            }
-
-            for post in posts-list {
-              html.a(class: "post-card", href: post.url, {
-                html.div(class: "card-content", {
-                  if "create" in post {
-                    html.elem("time", attrs: (class: "card-date", datetime: calver-iso(post.create)), calver-display(post.create))
-                  }
-                  if post.at("draft", default: false) {
-                    html.span(class: "draft-badge", i18n.draft)
-                  }
-                  html.h2(class: "card-title", post.title)
-                  if "description" in post {
-                    html.p(class: "card-desc", post.description)
-                  }
-                })
-              })
-            }
-          })
-        })
-
-        html.aside(class: "sidebar", {
-          html.div(class: "sidebar-inner", {
-            widget-search(extra-class: "desktop-search")
-            widget-author()
-            widget-about()
-          })
-        })
+    },
+    main-content: {
+      html.header(class: "article-header", {
+        html.h1(class: "article-title", page-title)
+        if page-description != "" {
+          html.p(style: "color: var(--text-muted);", page-description)
+        }
       })
-    })
-  })
+
+      widget-mobile-search()
+      post-card-grid(posts)
+    },
+    sidebar-content: widget-site-sidebar(),
+  )
 }

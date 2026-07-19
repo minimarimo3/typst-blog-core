@@ -84,3 +84,17 @@
     )
   })
 }
+
+#let widget-mobile-search() = {
+  html.div(class: "mobile-search", {
+    widget-search()
+  })
+}
+
+#let widget-site-sidebar() = {
+  html.div(class: "sidebar-inner", {
+    widget-search(extra-class: "desktop-search")
+    widget-author()
+    widget-about()
+  })
+}
