@@ -44,23 +44,30 @@ class CalVer:
 
 
 def load_site_metadata(context: BlogContext) -> dict:
+    data = eval_metadata_values(context, "site.typ", SITE_METADATA_LABEL)
+    if not data:
+        raise ValueError("site.typ must include #metadata(site) <site-meta>")
+    return data[0]
+
+
+def eval_metadata_values(
+    context: BlogContext,
+    input_path: str,
+    label: str,
+) -> list:
     result = run_typst(
         context,
-        "query",
+        "eval",
+        f"query({label}).map(it => it.value)",
+        "--in",
+        input_path,
         "--root",
         ".",
         "--features",
         "html",
-        "--field",
-        "value",
-        "site.typ",
-        SITE_METADATA_LABEL,
         capture_output=True,
     )
-    data = json.loads(result.stdout)
-    if not data:
-        raise ValueError("site.typ must include #metadata(site) <site-meta>")
-    return data[0]
+    return json.loads(result.stdout)
 
 
 def resolve_posts_dir(context: BlogContext, site: dict) -> Path:
@@ -185,20 +192,11 @@ def discover_post_files(
 
 
 def load_post_metadata(context: BlogContext, path: Path) -> dict | None:
-    result = run_typst(
+    data = eval_metadata_values(
         context,
-        "query",
-        "--root",
-        ".",
-        "--features",
-        "html",
-        "--field",
-        "value",
         str(path.relative_to(context.root_dir)),
         POST_METADATA_LABEL,
-        capture_output=True,
     )
-    data = json.loads(result.stdout)
     return data[0] if data else None
 
 

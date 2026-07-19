@@ -23,13 +23,12 @@ def run_typst(source: str, *, expect_success: bool = True) -> subprocess.Complet
         result = subprocess.run(
             [
                 "typst",
-                "query",
+                "eval",
+                "query(<result>).map(it => it.value)",
+                "--in",
+                source_file.name,
                 "--root",
                 str(CORE_DIR),
-                source_file.name,
-                "<result>",
-                "--field",
-                "value",
             ],
             check=False,
             text=True,
