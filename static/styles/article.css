@@ -183,12 +183,20 @@ blockquote {
   color: var(--text-muted);
 }
 
-.article-body blockquote + p {
+.article-body blockquote:not(.twitter-tweet) + p {
   margin-top: -1.3em;
   padding-right: 0.25rem;
   color: var(--text-muted);
   font-size: 0.92rem;
   text-align: right;
+}
+
+.article-body blockquote.twitter-tweet,
+.article-body .twitter-tweet-rendered {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 550px !important;
+  margin: 2em auto !important;
 }
 
 .article-body,
