@@ -43,3 +43,11 @@ a:hover {
 img {
   max-width: 100%;
 }
+
+figure > img,
+figure > svg,
+figure > p > img,
+figure > p > svg {
+  display: block;
+  margin-inline: auto;
+}
