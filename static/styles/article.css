@@ -215,8 +215,16 @@ figure {
   overflow-x: auto;
 }
 
+.article-body figure > p {
+  margin: 0;
+  text-align: center;
+}
+
 figure > img,
-figure > svg {
+figure > svg,
+figure > p > img,
+figure > p > svg {
+  box-sizing: border-box;
   max-width: 100%;
   height: auto;
   background-color: var(--figure-bg);
