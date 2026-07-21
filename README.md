@@ -121,7 +121,18 @@ repository root:
 User-authored posts should continue to import the root compatibility module:
 
 ```typst
-#import "/template.typ": article, calver, post-meta
+#import "/template.typ": post, calver
+
+#show: post.with(
+  slug: "my-first-post",
+  title: "My First Post",
+  create: calver(2026, 1, 1),
+  description: "A short description of the post.",
+  tags: ("Typst",),
+  draft: true,
+)
 ```
 
-The root `template.typ` re-exports stable authoring helpers from this submodule.
+The `post` show rule registers metadata and renders the remaining document as an
+article. The root `template.typ` re-exports this and other stable authoring
+helpers from the submodule.
