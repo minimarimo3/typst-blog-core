@@ -304,3 +304,40 @@
     sidebar-attrs: ("data-pagefind-ignore": "all", "data-nosnippet": ""),
   )
 }
+
+/// 記事のメタデータ登録と本文の描画をまとめて行う。
+///
+/// `#show: post.with(...)` として使い、後続の本文を `article` へ渡す。
+/// 引数は `post-meta` と同じ。
+#let post(
+  slug: none,
+  title: "記事タイトル",
+  authors: none,
+  create: none,
+  update: none,
+  tags: (),
+  description: none,
+  abstract: none,
+  og-image: none,
+  draft: true,
+  body,
+) = {
+  let meta = post-meta(
+    slug: slug,
+    title: title,
+    authors: authors,
+    create: create,
+    update: update,
+    tags: tags,
+    description: description,
+    abstract: abstract,
+    og-image: og-image,
+    draft: draft,
+  )
+  let render = article.with(..meta)
+
+  [
+    #metadata(meta) <post-meta>
+    #render(body)
+  ]
+}

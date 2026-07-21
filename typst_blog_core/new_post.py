@@ -39,9 +39,9 @@ def _post_source(
     create: dt.date,
     draft: bool,
 ) -> str:
-    return f'''#import "/template.typ": article, calver, post-meta
+    return f'''#import "/template.typ": post, calver
 
-#let meta = post-meta(
+#show: post.with(
   slug: {typst_string(slug)},
   title: {typst_string(title)},
   create: calver({create.year}, {create.month}, {create.day}),
@@ -49,9 +49,6 @@ def _post_source(
   tags: {_format_tags(tags)},
   draft: {str(draft).lower()},
 )
-
-#metadata(meta) <post-meta>
-#show: article.with(..meta)
 
 // Write the post body below.
 '''
