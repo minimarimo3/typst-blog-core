@@ -16,7 +16,6 @@
   --abstract-bg: #eff6ff;
   --abstract-border: #bfdbfe;
   --figure-bg: #ffffff;
-  --video-bg: #0f172a;
   --toast-bg: rgba(15, 23, 42, 0.88);
   --toast-text: #ffffff;
   --focus-ring: rgba(37, 99, 235, 0.18);
@@ -30,19 +29,4 @@
   --btn-misskey-text: #ffffff;
   --btn-copy-bg: #f8fafc;
   --btn-copy-text: #334155;
-  --color-note-bg: #eff6ff;
-  --color-note-border: #2563eb;
-  --color-note-text: #1d4ed8;
-  --color-tip-bg: #ecfdf5;
-  --color-tip-border: #059669;
-  --color-tip-text: #047857;
-  --color-important-bg: #f5f3ff;
-  --color-important-border: #7c3aed;
-  --color-important-text: #6d28d9;
-  --color-warning-bg: #fffbeb;
-  --color-warning-border: #d97706;
-  --color-warning-text: #b45309;
-  --color-caution-bg: #fef2f2;
-  --color-caution-border: #dc2626;
-  --color-caution-text: #b91c1c;
 }

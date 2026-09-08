@@ -13,8 +13,17 @@ from .context import BlogContext, run_typst
 
 
 SITE_METADATA_LABEL = "<site-meta>"
+EXTENSIONS_METADATA_LABEL = "<extensions-meta>"
 POST_METADATA_LABEL = "<post-meta>"
-EXCLUDED_DIRS = {".git", ".github", "public", "typst", "vendor", "__pycache__"}
+EXCLUDED_DIRS = {
+    ".git",
+    ".github",
+    "extensions",
+    "public",
+    "typst",
+    "vendor",
+    "__pycache__",
+}
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
 THEME_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
@@ -48,6 +57,50 @@ def load_site_metadata(context: BlogContext) -> dict:
     if not data:
         raise ValueError("site.typ must include #metadata(site) <site-meta>")
     return data[0]
+
+
+def validate_extension_assets(context: BlogContext) -> None:
+    data = eval_metadata_values(
+        context,
+        "extensions.typ",
+        EXTENSIONS_METADATA_LABEL,
+    )
+    if not data:
+        raise ValueError(
+            "extensions.typ must include #metadata(extensions) <extensions-meta>"
+        )
+
+    extensions = data[0]
+    if not isinstance(extensions, list):
+        raise ValueError("extensions must be an array")
+    for extension in extensions:
+        if not isinstance(extension, dict) or not all(
+            field in extension for field in ("name", "styles", "scripts")
+        ):
+            raise ValueError(
+                "extensions must contain entries created with extension(...)"
+            )
+        for field in ("styles", "scripts"):
+            if not isinstance(extension[field], list):
+                raise ValueError(
+                    f"extension '{extension['name']}' {field} must be an array"
+                )
+            for asset in extension[field]:
+                if not isinstance(asset, str):
+                    raise ValueError(
+                        f"extension '{extension['name']}' {field} must contain strings"
+                    )
+                if asset.startswith("https://"):
+                    continue
+                candidates = (
+                    context.user_static_dir / asset,
+                    context.core_static_dir / asset,
+                )
+                if not any(path.is_file() for path in candidates):
+                    raise ValueError(
+                        f"extension '{extension['name']}' references missing "
+                        f"static asset: static/{asset}"
+                    )
 
 
 def eval_metadata_values(

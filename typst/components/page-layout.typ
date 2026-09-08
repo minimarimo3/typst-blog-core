@@ -12,7 +12,7 @@
   assert(main-content != none, message: "page-layout: main-content is required")
   assert(sidebar-content != none, message: "page-layout: sidebar-content is required")
 
-  html.html(lang: html-language(site.language), {
+  html.elem("html", attrs: (lang: html-language(site.language), "data-theme": site.theme), {
     html.head(head-content)
     html.body({
       if before-content != none {

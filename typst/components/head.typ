@@ -1,5 +1,7 @@
 #import "/site.typ": site
+#import "/extensions.typ": extensions
 #import "../core/shared.typ": base-path
+#import "../core/extensions.typ": extension-assets, extension-asset-url
 #import "font-config.typ": google-font-families, font-css-lines
 
 #let _json-ld-text(value) = {
@@ -77,11 +79,19 @@
   html.link(rel: "stylesheet", href: base-path + "/styles/pages.css")
   html.link(rel: "stylesheet", href: base-path + "/themes/" + site.at("theme", default: "dark") + ".css")
 
+  let assets = extension-assets(extensions)
+  for stylesheet in assets.styles {
+    html.link(rel: "stylesheet", href: extension-asset-url(stylesheet, base-path))
+  }
+
   // theme CSS より後に注入することで CSS 変数を上書き（--font-{key} 形式）
   let _css-lines = font-css-lines(site.fonts)
   html.elem("style", ":root {\n" + _css-lines.join("\n") + "\n}")
 
   html.elem("script", attrs: (type: "module", src: base-path + "/scripts/main.js"))
+  for script in assets.scripts {
+    html.elem("script", attrs: (type: "module", src: extension-asset-url(script, base-path)))
+  }
   if sys.inputs.at("preview", default: "false") == "true" {
     html.elem("script", attrs: (src: "/__typst_blog_preview.js", defer: ""))
   }

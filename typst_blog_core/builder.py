@@ -15,6 +15,7 @@ from .metadata import (
     resolve_posts_dir,
     typst_string,
     validate_post_output_routes,
+    validate_extension_assets,
     write_generated_posts,
 )
 
@@ -274,6 +275,7 @@ def build(
     context = BlogContext.create(root_dir, base_path)
     print("Starting build...")
     site = load_site_config(context)
+    validate_extension_assets(context)
     posts_dir = resolve_posts_dir(context, site)
     posts = collect_posts(context, posts_dir)
     apply_update_policy(context, site, posts)

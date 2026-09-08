@@ -9,11 +9,12 @@ user blog repository:
 git submodule add https://github.com/minimarimo3/typst-blog-core.git vendor/typst-blog-core
 ```
 
-The user repository owns `site.typ`, posts, custom assets, and deployment
-workflow files. This core repository owns the reusable implementation:
+The user repository owns `site.typ`, posts, template-provided authoring
+extensions, custom assets, and deployment workflow files. This core repository
+owns the reusable implementation:
 
 - Typst templates under `typst/core/`
-- Typst components under `typst/components/`
+- shared Typst components and the extension registration contract
 - default CSS, themes, JavaScript, and robots.txt under `static/`
 - the Python command implementation in `typst_blog_core/`
 - thin direct-entry wrapper in `command.py`
@@ -116,6 +117,7 @@ Core Typst files intentionally import user-owned configuration from the blog
 repository root:
 
 - `/site.typ`
+- `/extensions.typ`
 - `/typst/generated/posts.typ`
 
 User-authored posts should continue to import the root compatibility module:
@@ -136,3 +138,12 @@ User-authored posts should continue to import the root compatibility module:
 The `post` show rule registers metadata and renders the remaining document as an
 article. The root `template.typ` re-exports this and other stable authoring
 helpers from the submodule.
+
+## Extension Contract
+
+The core only owns the generic extension registry and loads the CSS and
+JavaScript declared by `/extensions.typ`. Built-in conveniences such as alerts
+and YouTube embeds belong to the template repository and use that same public
+contract. A blog owner can therefore add or replace an authoring feature using
+only template-side Typst modules and files under `static/`, without editing or
+forking the core.
