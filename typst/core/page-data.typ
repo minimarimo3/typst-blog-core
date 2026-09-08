@@ -1,6 +1,11 @@
 #import "/site.typ": site
 #import "shared.typ": base-path, calver-key
 
+#let _output-list(outputs) = outputs.map(output => (
+  ..output,
+  url: base-path + output.path,
+))
+
 #let _post-list(posts) = if posts == none {
   ()
 } else {
@@ -20,6 +25,7 @@
 /// ホームrendererへ渡す、表示方式に依存しないデータ。
 #let home-page-data(
   posts: none,
+  outputs: (),
   title: none,
   authors: none,
   description: none,
@@ -38,6 +44,7 @@
       og-image: og-image,
     ),
     posts: _post-list(posts),
+    outputs: _output-list(outputs),
   )
 }
 

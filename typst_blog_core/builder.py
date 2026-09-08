@@ -16,7 +16,17 @@ from .metadata import (
     typst_string,
     validate_post_output_routes,
     validate_extension_assets,
-    write_generated_posts,
+    write_generated_site_data,
+)
+from .pipeline import (
+    BuildMode,
+    BuildTask,
+    HtmlTask,
+    OutputTask,
+    Pipeline,
+    PlannedOutput,
+    PostInfo,
+    load_pipeline,
 )
 
 
@@ -69,6 +79,39 @@ def copy_static_assets(context: BlogContext) -> None:
         source = context.root_dir / filename
         if source.is_file():
             shutil.copy2(source, context.output_dir / filename)
+
+
+def reserved_output_paths(
+    context: BlogContext,
+    posts: list[dict],
+    tag_slugs: dict[str, str],
+) -> set[str]:
+    paths = {"index.html", "404.html", "feed.xml", "sitemap.xml", "tags/index.html"}
+    for post in posts:
+        paths.add(f"{post['slug']}/index.html")
+        for asset in post["source_dir"].rglob("*"):
+            if (
+                asset.is_file()
+                and asset != post["source_file"]
+                and asset.suffix.lower() in STATIC_EXTENSIONS
+            ):
+                relative = asset.relative_to(post["source_dir"]).as_posix()
+                paths.add(f"{post['slug']}/{relative}")
+        for tag in post["tags"]:
+            paths.add(f"tags/{tag_slugs[tag]}/index.html")
+    for source_dir in (context.theme_static_dir, context.user_static_dir):
+        if source_dir.is_dir():
+            paths.update(
+                asset.relative_to(source_dir).as_posix()
+                for asset in source_dir.rglob("*")
+                if asset.is_file()
+            )
+    paths.update(
+        filename
+        for filename in ROOT_STATIC_FILES
+        if (context.root_dir / filename).is_file()
+    )
+    return paths
 
 
 def _compile_theme_entry(
@@ -203,8 +246,9 @@ def build_static_pages(context: BlogContext) -> None:
         "home",
         '''#import "/theme/theme.typ": render-home
 #import "/vendor/typst-blog-core/typst/core/page-data.typ": home-page-data
-#import "/.build/generated/posts.typ": post-data
-#render-home(home-page-data(posts: post-data))
+#import "/vendor/typst-blog-core/typst/core/build-data.typ": load-build-data
+#let build-data = load-build-data()
+#render-home(home-page-data(posts: build-data.posts, outputs: build-data.site-outputs))
 ''',
         context.output_dir / "index.html",
     )
@@ -273,12 +317,76 @@ def generate_sitemap(context: BlogContext, site: dict, posts: list[dict]) -> Non
     (context.output_dir / "sitemap.xml").write_text(xml, encoding="utf-8")
 
 
+def _build_task(
+    context: BlogContext,
+    mode: BuildMode,
+    site: dict,
+    posts: list[dict],
+) -> BuildTask:
+    return BuildTask(
+        root_dir=context.root_dir,
+        build_dir=context.build_dir,
+        output_dir=context.output_dir,
+        mode=mode,
+        site=site,
+        posts=tuple(PostInfo.from_post(post) for post in posts),
+        _context=context,
+    )
+
+
+def _run_outputs(
+    task: BuildTask,
+    outputs: list[PlannedOutput],
+) -> None:
+    for output in outputs:
+        print(f"Building extra output: {output.label}")
+        output.destination.parent.mkdir(parents=True, exist_ok=True)
+        output.build(
+            OutputTask(
+                **task.__dict__,
+                id=output.id,
+                label=output.label,
+                media_type=output.media_type,
+                destination=output.destination,
+                post=output.post,
+            )
+        )
+        if not output.destination.is_file():
+            relative = output.destination.relative_to(task.root_dir)
+            raise RuntimeError(
+                f"pipeline output '{output.id}' did not create its declared file: {relative}"
+            )
+
+
+def _run_after_html(pipeline: Pipeline, task: BuildTask) -> None:
+    hooks = pipeline.active_after_html(task.mode)
+    if not hooks:
+        return
+    for path in sorted(task.output_dir.rglob("*.html")):
+        relative = path.relative_to(task.output_dir).as_posix()
+        output_path = "/" if relative == "index.html" else "/" + relative
+        for hook in hooks:
+            print(f"Running after_html '{hook.id}': {relative}")
+            hook.run(HtmlTask(**task.__dict__, path=path, output_path=output_path))
+            if not path.is_file():
+                raise RuntimeError(f"after_html '{hook.id}' removed its input: {relative}")
+
+
+def _run_post_build(pipeline: Pipeline, task: BuildTask) -> None:
+    for hook in pipeline.active_post_build(task.mode):
+        print(f"Running post_build: {hook.id}")
+        hook.run(task)
+
+
 def build(
     root_dir: Path | str | None = None,
     base_path: str | None = None,
     *,
     include_drafts: bool = False,
+    mode: BuildMode = "build",
 ) -> None:
+    if mode not in {"build", "preview"}:
+        raise ValueError("build mode must be 'build' or 'preview'")
     context = BlogContext.create(root_dir, base_path)
     print("Starting build...")
     site = load_site_config(context)
@@ -291,6 +399,14 @@ def build(
     validate_post_output_routes(posts, context.theme_static_dir)
     published_count = sum(1 for post in posts if not post["draft"])
     print(f"Found {len(posts)} posts ({published_count} published).")
+    active_posts = posts if include_drafts else [post for post in posts if not post["draft"]]
+    pipeline = load_pipeline(context)
+    post_outputs, site_outputs = pipeline.plan_outputs(
+        context,
+        active_posts,
+        mode,
+        reserved_output_paths(context, active_posts, tag_slugs),
+    )
 
     if context.build_dir.exists():
         shutil.rmtree(context.build_dir)
@@ -299,7 +415,24 @@ def build(
     if context.output_dir.exists():
         shutil.rmtree(context.output_dir)
     context.output_dir.mkdir(parents=True, exist_ok=True)
-    write_generated_posts(context, posts, tag_slugs, include_drafts=include_drafts)
+    task = _build_task(context, mode, site, active_posts)
+    all_outputs = [
+        output
+        for outputs in post_outputs.values()
+        for output in outputs
+    ] + site_outputs
+    _run_outputs(task, all_outputs)
+    write_generated_site_data(
+        context,
+        posts,
+        tag_slugs,
+        include_drafts=include_drafts,
+        post_outputs={
+            slug: [output.as_theme_data() for output in outputs]
+            for slug, outputs in post_outputs.items()
+        },
+        site_outputs=[output.as_theme_data() for output in site_outputs],
+    )
     for post in posts:
         if post["draft"] and not include_drafts:
             print(f"Draft skip: {post['title']}")
@@ -312,4 +445,6 @@ def build(
     print("Generating RSS and sitemap...")
     generate_rss(context, site, posts)
     generate_sitemap(context, site, posts)
+    _run_after_html(pipeline, task)
+    _run_post_build(pipeline, task)
     print("Build complete.")

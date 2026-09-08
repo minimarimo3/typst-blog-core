@@ -17,15 +17,15 @@ class PreviewTests(unittest.TestCase):
     def test_snapshot_ignores_build_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / ".build" / "generated").mkdir(parents=True)
-            (root / ".build" / "generated" / "posts.typ").write_text("generated")
+            (root / ".build" / "typst").mkdir(parents=True)
+            (root / ".build" / "typst" / "site-data.typ").write_text("generated")
             (root / "posts").mkdir()
             (root / "posts" / "article.typ").write_text("source")
 
             snapshot = _preview_snapshot(root)
 
             self.assertIn("posts/article.typ", snapshot)
-            self.assertNotIn(".build/generated/posts.typ", snapshot)
+            self.assertNotIn(".build/typst/site-data.typ", snapshot)
 
     def test_initial_build_includes_drafts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -45,6 +45,7 @@ class PreviewTests(unittest.TestCase):
                 root_dir=Path(directory).resolve(),
                 base_path="",
                 include_drafts=True,
+                mode="preview",
             )
             thread.return_value.start.assert_called_once_with()
             server.serve_forever.assert_called_once_with()

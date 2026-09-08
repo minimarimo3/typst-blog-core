@@ -20,8 +20,8 @@ class ContextTests(unittest.TestCase):
 
             self.assertEqual(context.build_dir, root / ".build")
             self.assertEqual(
-                context.generated_posts_file,
-                root / ".build" / "generated" / "posts.typ",
+                context.generated_site_data_file,
+                root / ".build" / "typst" / "site-data.typ",
             )
 
 

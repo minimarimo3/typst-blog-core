@@ -20,7 +20,7 @@ from typst_blog_core.metadata import (  # noqa: E402
     validate_post_output_routes,
     validate_post_slug,
     validate_post_tags,
-    write_generated_posts,
+    write_generated_site_data,
 )
 
 
@@ -113,10 +113,10 @@ class GeneratedRouteDataTests(unittest.TestCase):
     def test_empty_site_uses_empty_typst_dictionaries(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
-            write_generated_posts(context, [], {})
+            write_generated_site_data(context, [], {})
             self.assertEqual(
-                context.generated_posts_file.read_text(encoding="utf-8"),
-                "#let post-data = (:)\n\n#let tag-slugs = (:)\n",
+                context.generated_site_data_file.read_text(encoding="utf-8"),
+                "#let posts = (:)\n\n#let tag-slugs = (:)\n\n#let site-outputs = ()\n",
             )
 
     def test_update_date_uses_calver_data_accepted_by_article_helpers(self) -> None:
@@ -125,7 +125,7 @@ class GeneratedRouteDataTests(unittest.TestCase):
             source = context.root_dir / "post" / "index.typ"
             source.parent.mkdir()
             source.write_text("post", encoding="utf-8")
-            write_generated_posts(
+            write_generated_site_data(
                 context,
                 [
                     {
@@ -142,10 +142,49 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 ],
                 {},
             )
-            generated = context.generated_posts_file.read_text(encoding="utf-8")
+            generated = context.generated_site_data_file.read_text(encoding="utf-8")
             self.assertIn(
                 "update: (year: 2026, month: 3, day: 4, patch: 0)", generated
             )
+
+    def test_extra_outputs_are_written_to_private_build_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            source = context.root_dir / "post" / "index.typ"
+            source.parent.mkdir()
+            source.write_text("post", encoding="utf-8")
+            post = {
+                "slug": "post",
+                "url_slug": "post",
+                "title": "Post",
+                "create": make_calver(2026, 1, 1),
+                "update": None,
+                "description": "Description",
+                "tags": (),
+                "draft": False,
+                "source_file": source,
+            }
+            write_generated_site_data(
+                context,
+                [post],
+                {},
+                post_outputs={
+                    "post": [
+                        {
+                            "id": "pdf",
+                            "label": "PDF",
+                            "media_type": "application/pdf",
+                            "path": "/post/article.pdf",
+                        }
+                    ]
+                },
+            )
+
+            generated = context.generated_site_data_file.read_text(encoding="utf-8")
+            self.assertIn('#let posts = (', generated)
+            self.assertIn('id: "pdf"', generated)
+            self.assertIn('media-type: "application/pdf"', generated)
+            self.assertIn('path: "/post/article.pdf"', generated)
 
     def test_drafts_are_only_generated_for_preview(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -165,17 +204,17 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 "source_file": source,
             }
 
-            write_generated_posts(context, [draft], {"Draft": "Draft"})
-            published = context.generated_posts_file.read_text(encoding="utf-8")
+            write_generated_site_data(context, [draft], {"Draft": "Draft"})
+            published = context.generated_site_data_file.read_text(encoding="utf-8")
             self.assertNotIn('"draft-post"', published)
 
-            write_generated_posts(
+            write_generated_site_data(
                 context,
                 [draft],
                 {"Draft": "Draft"},
                 include_drafts=True,
             )
-            preview = context.generated_posts_file.read_text(encoding="utf-8")
+            preview = context.generated_site_data_file.read_text(encoding="utf-8")
             self.assertIn('"draft-post"', preview)
             self.assertIn("draft: true", preview)
 

@@ -121,7 +121,7 @@ def _watch_preview(root_dir: Path, state: _PreviewState) -> None:
         snapshot = _preview_snapshot(root_dir)
         print("Change detected. Rebuilding preview...")
         try:
-            build(root_dir=root_dir, base_path="", include_drafts=True)
+            build(root_dir=root_dir, base_path="", include_drafts=True, mode="preview")
         except Exception as exc:
             print(f"Preview rebuild failed: {exc}", file=sys.stderr)
         else:
@@ -131,7 +131,7 @@ def _watch_preview(root_dir: Path, state: _PreviewState) -> None:
 
 def preview(root_dir: Path | str | None = None) -> None:
     context = BlogContext.create(root_dir, base_path="")
-    build(root_dir=context.root_dir, base_path="", include_drafts=True)
+    build(root_dir=context.root_dir, base_path="", include_drafts=True, mode="preview")
     state = _PreviewState()
     _PreviewRequestHandler.preview_state = state
     handler = functools.partial(_PreviewRequestHandler, directory=str(context.output_dir))

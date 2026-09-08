@@ -1,10 +1,7 @@
 #import "/site.typ": site
 #import "shared.typ": export-target, main-font, heading-font, math-font, base-path, calver-key
-#import "/.build/generated/posts.typ" as generated-posts
 #import "article-seo.typ": article-seo-data
-
-#let post-data = generated-posts.post-data
-#let tag-slugs = dictionary(generated-posts).at("tag-slugs", default: (:))
+#import "build-data.typ": load-build-data
 
 /// 記事のメタデータを構築する。
 #let post-meta(
@@ -41,7 +38,7 @@
   )
 }
 
-#let _post-navigation(slug) = {
+#let _post-navigation(slug, post-data) = {
   let sorted-posts = post-data
     .pairs()
     .map(pair => {
@@ -86,6 +83,9 @@
   assert(create != none, message: "create is required")
   assert(description != none, message: "description is required")
 
+  let build-data = load-build-data()
+  let post-data = build-data.posts
+  let tag-slugs = build-data.tag-slugs
   let generated = post-data.at(slug)
   let generated-update = generated.at("update", default: none)
   let url-slug = generated.at("url-slug")
@@ -108,6 +108,10 @@
   } else {
     site.github_repo.trim("/", at: end) + "/commits/main/" + source-path
   }
+  let outputs = generated.at("outputs", default: ()).map(output => (
+    ..output,
+    url: base-path + output.path,
+  ))
 
   (
     site: site,
@@ -134,8 +138,9 @@
       og-image: og-image,
       draft: draft,
       source-url: source-url,
+      outputs: outputs,
     ),
-    navigation: _post-navigation(slug),
+    navigation: _post-navigation(slug, post-data),
     seo: seo,
     body: body,
   )

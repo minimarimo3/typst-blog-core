@@ -36,7 +36,7 @@ class BlogContext:
     root_dir: Path
     build_dir: Path
     output_dir: Path
-    generated_posts_file: Path
+    generated_site_data_file: Path
     core_dir: Path
     theme_static_dir: Path
     user_static_dir: Path
@@ -54,7 +54,7 @@ class BlogContext:
             root_dir=root,
             build_dir=build_dir,
             output_dir=root / "public",
-            generated_posts_file=build_dir / "generated" / "posts.typ",
+            generated_site_data_file=build_dir / "typst" / "site-data.typ",
             core_dir=CORE_DIR,
             theme_static_dir=root / "theme" / "static",
             user_static_dir=root / "static",

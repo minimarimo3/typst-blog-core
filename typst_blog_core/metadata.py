@@ -381,20 +381,24 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
     return posts
 
 
-def write_generated_posts(
+def write_generated_site_data(
     context: BlogContext,
     posts: list[dict],
     tag_slugs: dict[str, str],
     *,
     include_drafts: bool = False,
+    post_outputs: dict[str, list[dict[str, str]]] | None = None,
+    site_outputs: list[dict[str, str]] | None = None,
 ) -> None:
-    context.generated_posts_file.parent.mkdir(parents=True, exist_ok=True)
+    context.generated_site_data_file.parent.mkdir(parents=True, exist_ok=True)
+    post_outputs = post_outputs or {}
+    site_outputs = site_outputs or []
     visible_posts = (
         posts if include_drafts else [post for post in posts if not post["draft"]]
     )
     lines: list[str] = []
     if visible_posts:
-        lines.append("#let post-data = (")
+        lines.append("#let posts = (")
         for post in visible_posts:
             tags = post["tags"]
             tag_value = (
@@ -421,12 +425,15 @@ def write_generated_posts(
                     f"    tags: {tag_value},",
                     f"    draft: {'true' if post['draft'] else 'false'},",
                     f"    source_url_path: {typst_string(source_url_path)},",
+                    "    outputs: "
+                    + _format_generated_outputs(post_outputs.get(post["slug"], []))
+                    + ",",
                     "  ),",
                 ]
             )
         lines.append(")")
     else:
-        lines.append("#let post-data = (:)")
+        lines.append("#let posts = (:)")
     lines.append("")
     if tag_slugs:
         lines.append("#let tag-slugs = (")
@@ -435,4 +442,23 @@ def write_generated_posts(
         lines.append(")")
     else:
         lines.append("#let tag-slugs = (:)")
-    context.generated_posts_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    lines.append("")
+    lines.append(f"#let site-outputs = {_format_generated_outputs(site_outputs)}")
+    context.generated_site_data_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _format_generated_outputs(outputs: list[dict[str, str]]) -> str:
+    if not outputs:
+        return "()"
+    entries = []
+    for output in outputs:
+        entries.append(
+            "("
+            f"id: {typst_string(output['id'])}, "
+            f"label: {typst_string(output['label'])}, "
+            f"media-type: {typst_string(output['media_type'])}, "
+            f"path: {typst_string(output['path'])}"
+            ")"
+        )
+    suffix = "," if len(entries) == 1 else ""
+    return "(" + ", ".join(entries) + suffix + ")"

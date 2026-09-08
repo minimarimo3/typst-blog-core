@@ -20,7 +20,7 @@ files. This core repository owns the reusable implementation:
 - thin direct-entry wrapper in `command.py`
 - compatibility facade in `build.py` for blog repositories using the former wrapper
 - RSS, sitemap, generated page-entry, tag-route, and post metadata logic
-- Pagefind build and preview integration
+- user-owned Python build-pipeline loading and validated output routing
 - validation helpers under `dev/`
 
 ## Use From A Blog Repository
@@ -64,9 +64,10 @@ python3 command.py new my-first-post \
 
 The Python package is split by responsibility: `cli.py` dispatches commands,
 `new_post.py` creates posts, `metadata.py` validates and collects metadata,
-`builder.py` produces the site, and `preview.py` owns the local server and
-watcher. Updating the pinned submodule therefore updates all command behavior
-without copying Python implementation into the blog repository.
+`pipeline.py` loads site-owned build extensions, `builder.py` produces the site,
+and `preview.py` owns the local server and watcher. Updating the pinned
+submodule therefore updates all command behavior without copying Python
+implementation into the blog repository.
 
 The former core-level `build.py` API remains as a compatibility facade so an
 older blog wrapper can still load `build()` and `preview()` after updating only
@@ -144,8 +145,13 @@ repository root:
 
 - `/site.typ`
 - `/extensions.typ`
-- `/.build/generated/posts.typ`
 - `/theme/theme.typ`
+
+The Python builder also writes private intermediate data to
+`/.build/typst/site-data.typ`. Core reads it lazily through
+`typst/core/build-data.typ` and passes normalized values to theme renderers.
+Themes should consume `data.posts`, `data.post.outputs`, and `data.outputs`
+instead of importing the private generated file.
 
 User-authored posts should continue to import the root compatibility module:
 
@@ -166,6 +172,27 @@ The `post` show rule registers metadata and asks the renderer bound by the root
 `template.typ` to render the remaining document. This root module is the
 composition boundary between core and theme and also re-exports stable
 authoring helpers.
+
+## Build Pipeline Contract
+
+If the blog root contains `blog.py`, core loads it for every build and preview
+rebuild and calls `configure(pipeline)`. A site can register:
+
+- `post_output` for a declared file generated once per included post
+- `site_output` for a declared site-wide file
+- `after_html` for each HTML file below `public/`
+- `post_build` after the completed local artifact is available
+
+Outputs run before HTML so their validated metadata can be included in renderer
+data. Output callbacks must create exactly their declared file; route conflicts,
+unsafe paths, callback exceptions, and non-zero subprocess exits fail the build.
+`after_html` and `post_build` hooks run in registration order.
+
+Extra outputs and `post_build` default to production builds only. `after_html`
+defaults to both production and preview. Each registration can set `modes` to
+an explicit subset of `{"build", "preview"}`. Core never installs hook
+dependencies automatically and does not treat local `post_build` completion as
+successful deployment.
 
 ## Extension Contract
 
