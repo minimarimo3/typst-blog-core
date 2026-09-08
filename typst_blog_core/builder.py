@@ -148,9 +148,8 @@ def _compile_theme_entry(
 
 def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
     lines = [
-        '#import "/theme/theme.typ": render-tag',
-        '#import "/vendor/typst-blog-core/typst/core/page-data.typ": tag-page-data',
-        "#render-tag(tag-page-data(",
+        '#import "/theme/theme.typ": render-tag, core',
+        "#render-tag(core.tag-page-data(",
         f"  tag: {typst_string(tag)},",
         f"  tag-slug: {typst_string(tag_slug)},",
         "  posts: (",
@@ -186,9 +185,8 @@ def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
 
 def _tags_index_content(tags_with_counts: list[tuple[str, str, int]]) -> str:
     lines = [
-        '#import "/theme/theme.typ": render-tags-index',
-        '#import "/vendor/typst-blog-core/typst/core/page-data.typ": tags-index-page-data',
-        "#render-tags-index(tags-index-page-data(",
+        '#import "/theme/theme.typ": render-tags-index, core',
+        "#render-tags-index(core.tags-index-page-data(",
         "  tags: (",
     ]
     for tag, slug, count in tags_with_counts:
@@ -242,25 +240,30 @@ def build_tag_pages(
     print(f"Built {len(tag_posts)} tag page(s).")
 
 
+def _home_page_content() -> str:
+    return '''#import "/theme/theme.typ": render-home, core
+#let build-data = core.load-build-data()
+#render-home(core.home-page-data(posts: build-data.posts, outputs: build-data.site-outputs))
+'''
+
+
+def _not_found_page_content() -> str:
+    return '''#import "/theme/theme.typ": render-not-found, core
+#render-not-found(core.not-found-page-data())
+'''
+
+
 def build_static_pages(context: BlogContext) -> None:
     _compile_theme_entry(
         context,
         "home",
-        '''#import "/theme/theme.typ": render-home
-#import "/vendor/typst-blog-core/typst/core/page-data.typ": home-page-data
-#import "/vendor/typst-blog-core/typst/core/build-data.typ": load-build-data
-#let build-data = load-build-data()
-#render-home(home-page-data(posts: build-data.posts, outputs: build-data.site-outputs))
-''',
+        _home_page_content(),
         context.output_dir / "index.html",
     )
     _compile_theme_entry(
         context,
         "not-found",
-        '''#import "/theme/theme.typ": render-not-found
-#import "/vendor/typst-blog-core/typst/core/page-data.typ": not-found-page-data
-#render-not-found(not-found-page-data())
-''',
+        _not_found_page_content(),
         context.output_dir / "404.html",
     )
     copy_static_assets(context)

@@ -11,6 +11,8 @@ CORE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CORE_DIR))
 
 from typst_blog_core.builder import (  # noqa: E402
+    _home_page_content,
+    _not_found_page_content,
     _tag_page_content,
     _tags_index_content,
     copy_static_assets,
@@ -33,15 +35,38 @@ class ThemeBoundaryTests(unittest.TestCase):
             "extra": {"course": "typst-basics"},
         }
         source = _tag_page_content("Typst", "Typst", [post])
-        self.assertIn('#import "/theme/theme.typ": render-tag', source)
-        self.assertIn("tag-page-data", source)
+        self.assertIn('#import "/theme/theme.typ": render-tag, core', source)
+        self.assertIn("core.tag-page-data", source)
         self.assertIn("update: (year: 2026, month: 1, day: 3, patch: 0)", source)
         self.assertIn('extra: json(bytes("{\\\"course\\\":\\\"typst-basics\\\"}"))', source)
         self.assertNotIn("typst/core/tag.typ", source)
+        self.assertNotIn("/vendor/typst-blog-core", source)
 
         index_source = _tags_index_content([("Typst", "Typst", 1)])
-        self.assertIn('#import "/theme/theme.typ": render-tags-index', index_source)
-        self.assertIn("tags-index-page-data", index_source)
+        self.assertIn(
+            '#import "/theme/theme.typ": render-tags-index, core',
+            index_source,
+        )
+        self.assertIn("core.tags-index-page-data", index_source)
+        self.assertNotIn("/vendor/typst-blog-core", index_source)
+
+    def test_generated_static_entries_only_import_template_facade(self) -> None:
+        home_source = _home_page_content()
+        self.assertIn(
+            '#import "/theme/theme.typ": render-home, core',
+            home_source,
+        )
+        self.assertIn("core.load-build-data", home_source)
+        self.assertIn("core.home-page-data", home_source)
+        self.assertNotIn("/vendor/typst-blog-core", home_source)
+
+        not_found_source = _not_found_page_content()
+        self.assertIn(
+            '#import "/theme/theme.typ": render-not-found, core',
+            not_found_source,
+        )
+        self.assertIn("core.not-found-page-data", not_found_source)
+        self.assertNotIn("/vendor/typst-blog-core", not_found_source)
 
     def test_static_assets_come_from_theme_then_site(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

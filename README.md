@@ -125,6 +125,12 @@ short-lived Typst entry documents and calls the renderers exported by
 - `render-tags-index(data)`
 - `render-not-found(data)`
 
+Those generated entry documents import only `/theme/theme.typ`; they do not
+import files from `vendor/typst-blog-core` directly. The theme facade re-exports
+the core public module as the `core` namespace. New public core APIs therefore
+become available without adding another re-export to an already customized
+template, while the builder-to-theme boundary remains stable.
+
 The core resolves dates, encoded URLs, adjacent-post links, source links, and
 SEO data before calling these renderers. A theme controls the final document
 structure without duplicating the Python builder or the metadata contract.
@@ -139,6 +145,18 @@ such as favicons and extension assets remain in root `static/`; the builder
 copies the theme assets first and site assets second.
 
 ## Import Contract
+
+The stable template-facing entry points owned by core are:
+
+- `typst/api.typ`, exposed by the template as a module namespace
+- `typst/site-api.typ`, used only while constructing `/site.typ` to avoid a
+  circular import through APIs that consume the completed site configuration
+- `typst_blog_core.api`, the Python command entry point
+
+Files below `typst/core/`, `typst/components/`, and the other Python modules are
+implementation details. A core update may reorganize them without requiring
+changes to an existing user-owned template, provided these public entry points
+and the renderer contract remain compatible.
 
 Core Typst files intentionally import user-owned configuration from the blog
 repository root:
