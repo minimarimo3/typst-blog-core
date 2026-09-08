@@ -77,7 +77,7 @@ def _compile_theme_entry(
     source: str,
     output_file: Path,
 ) -> None:
-    entries_dir = context.generated_posts_file.parent / "entries"
+    entries_dir = context.build_dir / "entries"
     entries_dir.mkdir(parents=True, exist_ok=True)
     entry_file = entries_dir / f"{name}.typ"
     entry_file.write_text(source, encoding="utf-8")
@@ -203,7 +203,7 @@ def build_static_pages(context: BlogContext) -> None:
         "home",
         '''#import "/theme/theme.typ": render-home
 #import "/vendor/typst-blog-core/typst/core/page-data.typ": home-page-data
-#import "/typst/generated/posts.typ": post-data
+#import "/.build/generated/posts.typ": post-data
 #render-home(home-page-data(posts: post-data))
 ''',
         context.output_dir / "index.html",
@@ -291,6 +291,10 @@ def build(
     validate_post_output_routes(posts, context.theme_static_dir)
     published_count = sum(1 for post in posts if not post["draft"])
     print(f"Found {len(posts)} posts ({published_count} published).")
+
+    if context.build_dir.exists():
+        shutil.rmtree(context.build_dir)
+    context.build_dir.mkdir(parents=True, exist_ok=True)
 
     if context.output_dir.exists():
         shutil.rmtree(context.output_dir)

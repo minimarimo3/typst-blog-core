@@ -34,6 +34,7 @@ ROOT_STATIC_FILES = {
 @dataclass(frozen=True)
 class BlogContext:
     root_dir: Path
+    build_dir: Path
     output_dir: Path
     generated_posts_file: Path
     core_dir: Path
@@ -48,10 +49,12 @@ class BlogContext:
         base_path: str | None = None,
     ) -> "BlogContext":
         root = Path(root_dir).resolve() if root_dir is not None else Path.cwd().resolve()
+        build_dir = root / ".build"
         return cls(
             root_dir=root,
+            build_dir=build_dir,
             output_dir=root / "public",
-            generated_posts_file=root / "typst" / "generated" / "posts.typ",
+            generated_posts_file=build_dir / "generated" / "posts.typ",
             core_dir=CORE_DIR,
             theme_static_dir=root / "theme" / "static",
             user_static_dir=root / "static",

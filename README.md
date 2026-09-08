@@ -144,7 +144,7 @@ repository root:
 
 - `/site.typ`
 - `/extensions.typ`
-- `/typst/generated/posts.typ`
+- `/.build/generated/posts.typ`
 - `/theme/theme.typ`
 
 User-authored posts should continue to import the root compatibility module:

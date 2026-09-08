@@ -10,10 +10,23 @@ from unittest.mock import Mock, patch
 CORE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CORE_DIR))
 
-from typst_blog_core.preview import preview  # noqa: E402
+from typst_blog_core.preview import _preview_snapshot, preview  # noqa: E402
 
 
 class PreviewTests(unittest.TestCase):
+    def test_snapshot_ignores_build_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".build" / "generated").mkdir(parents=True)
+            (root / ".build" / "generated" / "posts.typ").write_text("generated")
+            (root / "posts").mkdir()
+            (root / "posts" / "article.typ").write_text("source")
+
+            snapshot = _preview_snapshot(root)
+
+            self.assertIn("posts/article.typ", snapshot)
+            self.assertNotIn(".build/generated/posts.typ", snapshot)
+
     def test_initial_build_includes_drafts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             server = Mock()

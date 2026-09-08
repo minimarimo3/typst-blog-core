@@ -17,7 +17,7 @@ PREVIEW_PORT_ATTEMPTS = 10
 PREVIEW_VERSION_PATH = "/__typst_blog_preview_version"
 PREVIEW_SCRIPT_PATH = "/__typst_blog_preview.js"
 PREVIEW_WATCH_SUFFIXES = STATIC_EXTENSIONS | {".css", ".typ", ".py"}
-PREVIEW_IGNORED_DIRS = {".git", "__pycache__", "public"}
+PREVIEW_IGNORED_DIRS = {".git", "__pycache__", ".build", "public"}
 
 
 class _PreviewState:
@@ -97,8 +97,6 @@ def _preview_snapshot(root_dir: Path) -> dict[str, tuple[int, int]]:
                 continue
             relative = path.relative_to(root_dir)
             if any(part in PREVIEW_IGNORED_DIRS for part in relative.parts):
-                continue
-            if relative.parts[:2] == ("typst", "generated"):
                 continue
             if (
                 path.suffix.lower() not in PREVIEW_WATCH_SUFFIXES

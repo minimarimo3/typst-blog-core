@@ -1,6 +1,6 @@
 #import "/site.typ": site
 #import "shared.typ": export-target, main-font, heading-font, math-font, base-path, calver-key
-#import "/typst/generated/posts.typ" as generated-posts
+#import "/.build/generated/posts.typ" as generated-posts
 #import "article-seo.typ": article-seo-data
 
 #let post-data = generated-posts.post-data
