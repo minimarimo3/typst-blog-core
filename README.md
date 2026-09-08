@@ -150,8 +150,11 @@ repository root:
 The Python builder also writes private intermediate data to
 `/.build/typst/site-data.typ`. Core reads it lazily through
 `typst/core/build-data.typ` and passes normalized values to theme renderers.
-Themes should consume `data.posts`, `data.post.outputs`, and `data.outputs`
-instead of importing the private generated file.
+Themes should consume `data.posts`, `data.post.extra`, `data.post.outputs`, and
+`data.outputs` instead of importing the private generated file. Core validates
+but does not interpret the JSON-compatible dictionary in `extra`; the same
+value is available on post entries in lists and as `PostInfo.extra` in Python
+pipeline callbacks.
 
 User-authored posts should continue to import the root compatibility module:
 
@@ -164,6 +167,7 @@ User-authored posts should continue to import the root compatibility module:
   create: calver(2026, 1, 1),
   description: "A short description of the post.",
   tags: ("Typst",),
+  extra: (course: "typst-basics", lesson: 1),
   draft: true,
 )
 ```

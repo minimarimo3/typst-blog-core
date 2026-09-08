@@ -293,6 +293,26 @@ def validate_post_tags(value: object) -> tuple[str, ...]:
     return tuple(tags)
 
 
+def validate_post_extra(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("extra must be a dictionary")
+    try:
+        json.dumps(value, ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("extra must contain only JSON-compatible values") from exc
+    return value
+
+
+def format_typst_json(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+    return f"json(bytes({typst_string(encoded)}))"
+
+
 def tag_to_slug(tag: str) -> str:
     normalized = unicodedata.normalize("NFC", tag)
     if (
@@ -345,6 +365,7 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
             create = parse_calver(meta.get("create"))
             update = parse_calver(meta.get("update"))
             tags = validate_post_tags(meta.get("tags", []))
+            extra = validate_post_extra(meta.get("extra", {}))
         except ValueError as exc:
             raise ValueError(f"{relative}: {exc}") from exc
         title = meta.get("title")
@@ -373,6 +394,7 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
                 "description": description,
                 "tags": tags,
                 "draft": draft,
+                "extra": extra,
                 "source_file": source_file,
                 "source_dir": source_file.parent,
             }
@@ -424,6 +446,7 @@ def write_generated_site_data(
                     f"    description: {typst_string(post['description'])},",
                     f"    tags: {tag_value},",
                     f"    draft: {'true' if post['draft'] else 'false'},",
+                    f"    extra: {format_typst_json(post['extra'])},",
                     f"    source_url_path: {typst_string(source_url_path)},",
                     "    outputs: "
                     + _format_generated_outputs(post_outputs.get(post["slug"], []))

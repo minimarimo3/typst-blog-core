@@ -10,6 +10,7 @@ from .git_dates import apply_update_policy
 from .metadata import (
     build_tag_slug_map,
     collect_posts,
+    format_typst_json,
     format_typst_calver,
     load_site_config,
     resolve_posts_dir,
@@ -175,6 +176,7 @@ def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
                 f"      description: {typst_string(post['description'])},",
                 f"      tags: {tag_value},",
                 f"      draft: {'true' if post['draft'] else 'false'},",
+                f"      extra: {format_typst_json(post['extra'])},",
                 "    ),",
             ]
         )

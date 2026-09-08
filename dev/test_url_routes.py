@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 CORE_DIR = Path(__file__).resolve().parents[1]
@@ -12,12 +15,14 @@ sys.path.insert(0, str(CORE_DIR))
 from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.metadata import (  # noqa: E402
     build_tag_slug_map,
+    collect_posts,
     discover_post_files,
     make_calver,
     post_slug_to_url_segment,
     resolve_posts_dir,
     tag_to_slug,
     validate_post_output_routes,
+    validate_post_extra,
     validate_post_slug,
     validate_post_tags,
     write_generated_site_data,
@@ -109,6 +114,45 @@ class TagSlugTests(unittest.TestCase):
             validate_post_tags(["é", "e\N{COMBINING ACUTE ACCENT}"])
 
 
+class PostExtraTests(unittest.TestCase):
+    def test_collects_nested_json_compatible_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            source = context.root_dir / "post" / "index.typ"
+            source.parent.mkdir()
+            source.write_text("post", encoding="utf-8")
+            extra = {
+                "course": {"id": "typst-basics", "lesson": 2},
+                "featured": True,
+            }
+            with (
+                patch(
+                    "typst_blog_core.metadata.discover_post_files",
+                    return_value=[source],
+                ),
+                patch(
+                    "typst_blog_core.metadata.load_post_metadata",
+                    return_value={
+                        "slug": "post",
+                        "title": "Post",
+                        "create": "2026.09.08",
+                        "description": "Description",
+                        "draft": False,
+                        "extra": extra,
+                    },
+                ),
+            ):
+                posts = collect_posts(context)
+
+            self.assertEqual(posts[0]["extra"], extra)
+
+    def test_rejects_non_dictionary_or_non_json_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "dictionary"):
+            validate_post_extra(["course"])
+        with self.assertRaisesRegex(ValueError, "JSON-compatible"):
+            validate_post_extra({"score": float("nan")})
+
+
 class GeneratedRouteDataTests(unittest.TestCase):
     def test_empty_site_uses_empty_typst_dictionaries(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -137,6 +181,7 @@ class GeneratedRouteDataTests(unittest.TestCase):
                         "description": "Description",
                         "tags": (),
                         "draft": False,
+                        "extra": {},
                         "source_file": source,
                     }
                 ],
@@ -162,6 +207,7 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 "description": "Description",
                 "tags": (),
                 "draft": False,
+                "extra": {},
                 "source_file": source,
             }
             write_generated_site_data(
@@ -186,6 +232,53 @@ class GeneratedRouteDataTests(unittest.TestCase):
             self.assertIn('media-type: "application/pdf"', generated)
             self.assertIn('path: "/post/article.pdf"', generated)
 
+    def test_extra_round_trips_through_generated_typst_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            source = context.root_dir / "post" / "index.typ"
+            source.parent.mkdir()
+            source.write_text("post", encoding="utf-8")
+            extra = {
+                "course": {"id": "Typst入門", "lesson": 2},
+                "featured": True,
+                "note": "first line\nsecond line",
+            }
+            write_generated_site_data(
+                context,
+                [
+                    {
+                        "slug": "post",
+                        "url_slug": "post",
+                        "title": "Post",
+                        "create": make_calver(2026, 1, 1),
+                        "update": None,
+                        "description": "Description",
+                        "tags": (),
+                        "draft": False,
+                        "extra": extra,
+                        "source_file": source,
+                    }
+                ],
+                {},
+            )
+
+            result = subprocess.run(
+                [
+                    "typst",
+                    "eval",
+                    "--format",
+                    "json",
+                    '{ import "/.build/typst/site-data.typ": posts; posts.at("post").extra }',
+                    "--root",
+                    str(context.root_dir),
+                ],
+                check=True,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+            )
+            self.assertEqual(json.loads(result.stdout), extra)
+
     def test_drafts_are_only_generated_for_preview(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
@@ -201,6 +294,7 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 "description": "Description",
                 "tags": ("Draft",),
                 "draft": True,
+                "extra": {},
                 "source_file": source,
             }
 

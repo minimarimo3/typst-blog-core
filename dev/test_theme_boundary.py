@@ -30,11 +30,13 @@ class ThemeBoundaryTests(unittest.TestCase):
             "description": "Description",
             "tags": ["Typst"],
             "draft": False,
+            "extra": {"course": "typst-basics"},
         }
         source = _tag_page_content("Typst", "Typst", [post])
         self.assertIn('#import "/theme/theme.typ": render-tag', source)
         self.assertIn("tag-page-data", source)
         self.assertIn("update: (year: 2026, month: 1, day: 3, patch: 0)", source)
+        self.assertIn('extra: json(bytes("{\\\"course\\\":\\\"typst-basics\\\"}"))', source)
         self.assertNotIn("typst/core/tag.typ", source)
 
         index_source = _tags_index_content([("Typst", "Typst", 1)])

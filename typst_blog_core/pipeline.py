@@ -37,6 +37,7 @@ class PostInfo:
     description: str
     tags: tuple[str, ...]
     draft: bool
+    extra: Mapping[str, object]
     source_file: Path
     source_dir: Path
 
@@ -51,6 +52,7 @@ class PostInfo:
             description=str(post["description"]),
             tags=tuple(post["tags"]),  # type: ignore[arg-type]
             draft=bool(post["draft"]),
+            extra=dict(post["extra"]),  # type: ignore[arg-type]
             source_file=Path(post["source_file"]),
             source_dir=Path(post["source_dir"]),
         )

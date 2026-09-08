@@ -15,18 +15,23 @@
   abstract: none,
   og-image: none,
   draft: true,
-) = (
-  slug: slug,
-  title: title,
-  authors: authors,
-  create: create,
-  update: update,
-  tags: tags,
-  description: description,
-  abstract: abstract,
-  og-image: og-image,
-  draft: draft,
-)
+  extra: (:),
+) = {
+  assert(type(extra) == dictionary, message: "extra must be a dictionary")
+  (
+    slug: slug,
+    title: title,
+    authors: authors,
+    create: create,
+    update: update,
+    tags: tags,
+    description: description,
+    abstract: abstract,
+    og-image: og-image,
+    draft: draft,
+    extra: extra,
+  )
+}
 
 #let _post-link(post) = if post == none {
   none
@@ -77,17 +82,20 @@
   abstract,
   og-image,
   draft,
+  extra,
   body,
 ) = {
   assert(slug != none, message: "slug is required")
   assert(create != none, message: "create is required")
   assert(description != none, message: "description is required")
+  assert(type(extra) == dictionary, message: "extra must be a dictionary")
 
   let build-data = load-build-data()
   let post-data = build-data.posts
   let tag-slugs = build-data.tag-slugs
   let generated = post-data.at(slug)
   let generated-update = generated.at("update", default: none)
+  let generated-extra = generated.at("extra", default: extra)
   let url-slug = generated.at("url-slug")
   let effective-update = if site.update_policy == "git" { generated-update } else { update }
   let document-authors = if authors == none { (site.author.name,) } else { authors }
@@ -137,6 +145,7 @@
       abstract: abstract-content,
       og-image: og-image,
       draft: draft,
+      extra: generated-extra,
       source-url: source-url,
       outputs: outputs,
     ),
@@ -159,6 +168,7 @@
   abstract: none,
   og-image: none,
   draft: false,
+  extra: (:),
   ..args,
   body,
 ) = context {
@@ -188,6 +198,7 @@
     abstract,
     og-image,
     draft,
+    extra,
     body,
   ))
 }
@@ -205,6 +216,7 @@
   abstract: none,
   og-image: none,
   draft: true,
+  extra: (:),
   body,
 ) = {
   let meta = post-meta(
@@ -218,6 +230,7 @@
     abstract: abstract,
     og-image: og-image,
     draft: draft,
+    extra: extra,
   )
   let render = article.with(renderer: renderer, ..meta)
 

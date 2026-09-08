@@ -33,6 +33,7 @@ def make_post(root: Path) -> dict:
         "description": "Description",
         "tags": (),
         "draft": False,
+        "extra": {"course": "typst-basics"},
         "source_file": source,
         "source_dir": source.parent,
     }
@@ -120,6 +121,7 @@ class PipelineExecutionTests(unittest.TestCase):
 
             def build_pdf(task) -> None:
                 self.assertEqual(task.post.slug, "hello")
+                self.assertEqual(task.post.extra["course"], "typst-basics")
                 task.destination.write_text("PDF", encoding="utf-8")
 
             pipeline.post_output(
