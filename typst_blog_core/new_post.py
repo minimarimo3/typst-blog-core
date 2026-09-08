@@ -87,14 +87,15 @@ def create_post(
         if match is not None and portable_route_key(match.group(1)) == requested_route_key:
             relative = source_file.relative_to(context.root_dir)
             raise ValueError(f"slug '{slug}' is already used by {relative}")
-    if context.user_static_dir.is_dir():
-        static_names = {
-            portable_route_key(path.name): path.name
-            for path in context.user_static_dir.iterdir()
-        }
-        collision = static_names.get(requested_route_key)
-        if collision is not None:
-            raise ValueError(f"slug '{slug}' conflicts with static/{collision}")
+    for static_dir in (context.theme_static_dir, context.user_static_dir):
+        if static_dir.is_dir():
+            static_names = {
+                portable_route_key(path.name): path.name
+                for path in static_dir.iterdir()
+            }
+            collision = static_names.get(requested_route_key)
+            if collision is not None:
+                raise ValueError(f"slug '{slug}' conflicts with static/{collision}")
 
     posts_dir.mkdir(parents=True, exist_ok=True)
     destination.mkdir()

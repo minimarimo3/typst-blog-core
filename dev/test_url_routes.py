@@ -61,12 +61,16 @@ class PostSlugTests(unittest.TestCase):
         for slug in (
             "tags",
             "pagefind",
-            "themes",
+            "color-schemes",
             "con",
             "con.txt",
             "con .txt",
             "lpt1",
         ):
+            with self.subTest(slug=slug), self.assertRaises(ValueError):
+                validate_post_slug(slug)
+
+        for slug in ("scripts", "styles"):
             with self.subTest(slug=slug), self.assertRaises(ValueError):
                 validate_post_slug(slug)
 
@@ -193,7 +197,14 @@ class PostsDirectoryTests(unittest.TestCase):
     def test_rejects_unsafe_or_managed_directories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
-            for value in ("../outside", "/tmp/posts", "C:\\posts", "vendor/posts", "static"):
+            for value in (
+                "../outside",
+                "/tmp/posts",
+                "C:\\posts",
+                "vendor/posts",
+                "static",
+                "theme/posts",
+            ):
                 with self.subTest(value=value), self.assertRaises(ValueError):
                     resolve_posts_dir(context, {"posts_dir": value})
 

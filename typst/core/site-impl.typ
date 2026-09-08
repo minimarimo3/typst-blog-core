@@ -4,7 +4,7 @@
 /// - description (str): サイト説明文（空文字不可）
 /// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュなし
 /// - language (str, dictionary): `"ja"`、または Typst の `text` と同じ `lang` / `region` / `script` を持つ辞書
-/// - theme (str): テーマ名。英数字・`_`・`-` のみ使用可（例: `"dark"`, `"light"`）
+/// - theme (dictionary): template側themeが定義する設定。coreは内容を解釈しない
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
 /// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
 /// - default_og_image (str, none): 記事やページに画像指定がないときに使う既定OGP画像 URL
@@ -26,7 +26,7 @@
   description: none,
   base_url: none,
   language: none,
-  theme: "dark",
+  theme: (:),
   posts_dir: ".",
   update_policy: "git",
   default_og_image: none,
@@ -96,14 +96,7 @@
   _req(posts_dir, "posts_dir")
   assert(update_policy == "git" or update_policy == "manual", message: "site.update_policy: git または manual が必要です")
 
-  // theme（英数字・アンダースコア・ハイフンのみ）
-  assert(type(theme) == str and theme != "", message: "site.theme: 空でない文字列が必要です")
-  assert(
-    theme.clusters().all(c =>
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".contains(c)
-    ),
-    message: "site.theme: 英数字・アンダースコア・ハイフンのみ使用可能です",
-  )
+  assert(type(theme) == dictionary, message: "site.theme: theme固有設定の辞書が必要です")
 
   // fonts（main・code は必須、それぞれ pdf フィールドが必要）
   assert(type(fonts) == dictionary, message: "site.fonts: 辞書が必要です")

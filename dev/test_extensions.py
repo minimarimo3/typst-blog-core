@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from typst_blog_core.context import BlogContext
-from typst_blog_core.metadata import validate_extension_assets
-
-
 CORE_DIR = Path(__file__).resolve().parents[1]
 DEV_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(CORE_DIR))
+
+from typst_blog_core.context import BlogContext  # noqa: E402
+from typst_blog_core.metadata import validate_extension_assets  # noqa: E402
 
 
 def evaluate(

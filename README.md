@@ -9,18 +9,18 @@ user blog repository:
 git submodule add https://github.com/minimarimo3/typst-blog-core.git vendor/typst-blog-core
 ```
 
-The user repository owns `site.typ`, posts, template-provided authoring
-extensions, custom assets, and deployment workflow files. This core repository
-owns the reusable implementation:
+The user repository owns `site.typ`, posts, the complete page theme,
+template-provided authoring extensions, custom assets, and deployment workflow
+files. This core repository owns the reusable implementation:
 
-- Typst templates under `typst/core/`
-- shared Typst components and the extension registration contract
-- default CSS, themes, JavaScript, and robots.txt under `static/`
+- metadata, URL, SEO-data, page-data, language, and extension contracts under
+  `typst/core/`
+- renderer-independent Typst helpers
 - the Python command implementation in `typst_blog_core/`
 - thin direct-entry wrapper in `command.py`
 - compatibility facade in `build.py` for blog repositories using the former wrapper
-- RSS, sitemap, tag page, and generated post metadata logic
-- Pagefind-compatible markup and frontend search integration
+- RSS, sitemap, generated page-entry, tag-route, and post metadata logic
+- Pagefind build and preview integration
 - validation helpers under `dev/`
 
 ## Use From A Blog Repository
@@ -111,6 +111,32 @@ vYYYY.MM.DD
 vYYYY.MM.DD.PATCH
 ```
 
+## Theme Boundary
+
+The core does not own completed HTML pages, page layout, CSS, or browser-side
+JavaScript. Those live in the user repository under `theme/`. The build creates
+short-lived Typst entry documents and calls the renderers exported by
+`/theme/theme.typ`:
+
+- `render-article(data)`
+- `render-home(data)`
+- `render-tag(data)`
+- `render-tags-index(data)`
+- `render-not-found(data)`
+
+The core resolves dates, encoded URLs, adjacent-post links, source links, and
+SEO data before calling these renderers. A theme controls the final document
+structure without duplicating the Python builder or the metadata contract.
+
+The `site.theme` dictionary is also opaque to core. The template's
+`theme/config.typ` defines and validates settings used by its own renderers, so
+a replacement theme does not inherit assumptions such as a particular color
+scheme.
+
+`theme/static/` contains the theme's CSS and JavaScript. Site-specific files
+such as favicons and extension assets remain in root `static/`; the builder
+copies the theme assets first and site assets second.
+
 ## Import Contract
 
 Core Typst files intentionally import user-owned configuration from the blog
@@ -119,6 +145,7 @@ repository root:
 - `/site.typ`
 - `/extensions.typ`
 - `/typst/generated/posts.typ`
+- `/theme/theme.typ`
 
 User-authored posts should continue to import the root compatibility module:
 
@@ -135,9 +162,10 @@ User-authored posts should continue to import the root compatibility module:
 )
 ```
 
-The `post` show rule registers metadata and renders the remaining document as an
-article. The root `template.typ` re-exports this and other stable authoring
-helpers from the submodule.
+The `post` show rule registers metadata and asks the renderer bound by the root
+`template.typ` to render the remaining document. This root module is the
+composition boundary between core and theme and also re-exports stable
+authoring helpers.
 
 ## Extension Contract
 

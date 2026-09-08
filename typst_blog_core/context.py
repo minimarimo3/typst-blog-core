@@ -37,7 +37,7 @@ class BlogContext:
     output_dir: Path
     generated_posts_file: Path
     core_dir: Path
-    core_static_dir: Path
+    theme_static_dir: Path
     user_static_dir: Path
     base_path: str | None = None
 
@@ -53,7 +53,7 @@ class BlogContext:
             output_dir=root / "public",
             generated_posts_file=root / "typst" / "generated" / "posts.typ",
             core_dir=CORE_DIR,
-            core_static_dir=CORE_DIR / "static",
+            theme_static_dir=root / "theme" / "static",
             user_static_dir=root / "static",
             base_path=base_path,
         )

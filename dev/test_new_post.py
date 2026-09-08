@@ -138,6 +138,18 @@ class NewPostTests(unittest.TestCase):
                     description="Description",
                 )
 
+    def test_rejects_route_owned_by_theme_static(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            theme_route = Path(directory) / "theme" / "static" / "downloads"
+            theme_route.mkdir(parents=True)
+            with self.assertRaisesRegex(ValueError, "conflicts with static/downloads"):
+                create_post(
+                    root_dir=directory,
+                    slug="downloads",
+                    title="Downloads",
+                    description="Description",
+                )
+
     def test_parses_iso_date(self) -> None:
         self.assertEqual(parse_post_date("2026-07-19"), dt.date(2026, 7, 19))
         with self.assertRaisesRegex(ValueError, "YYYY-MM-DD"):

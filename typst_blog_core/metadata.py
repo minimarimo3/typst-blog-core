@@ -20,14 +20,14 @@ EXCLUDED_DIRS = {
     ".github",
     "extensions",
     "public",
+    "theme",
     "typst",
     "vendor",
     "__pycache__",
 }
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
-THEME_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
-GENERATED_ROUTE_NAMES = {"pagefind", "tags", "themes"}
+GENERATED_ROUTE_NAMES = {"color-schemes", "pagefind", "scripts", "styles", "tags"}
 PORTABLE_RESERVED_NAMES = {
     "aux",
     "con",
@@ -94,7 +94,7 @@ def validate_extension_assets(context: BlogContext) -> None:
                     continue
                 candidates = (
                     context.user_static_dir / asset,
-                    context.core_static_dir / asset,
+                    context.theme_static_dir / asset,
                 )
                 if not any(path.is_file() for path in candidates):
                     raise ValueError(
@@ -151,23 +151,7 @@ def load_site_config(context: BlogContext) -> dict:
         if not site.get(field):
             raise ValueError(f"site.{field} is required")
 
-    theme = site.get("theme", "dark")
-    if not isinstance(theme, str) or not theme:
-        raise ValueError("site.theme must be a non-empty string")
-    if not THEME_NAME_RE.fullmatch(theme):
-        raise ValueError("site.theme may only contain letters, numbers, underscores, and hyphens")
-    theme_paths = (
-        context.user_static_dir / "themes" / f"{theme}.css",
-        context.core_static_dir / "themes" / f"{theme}.css",
-    )
-    if not any(path.is_file() for path in theme_paths):
-        raise ValueError(
-            f"site.theme '{theme}' does not exist in static/themes "
-            "or vendor/typst-blog-core/static/themes"
-        )
-
     site["base_url"] = site["base_url"].rstrip("/")
-    site["theme"] = theme
     update_policy = site.get("update_policy", "git")
     if update_policy not in {"git", "manual"}:
         raise ValueError("site.update_policy must be 'git' or 'manual'")

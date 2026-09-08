@@ -63,7 +63,7 @@ def copy_static_dir(context: BlogContext, source_dir: Path) -> None:
 
 
 def copy_static_assets(context: BlogContext) -> None:
-    copy_static_dir(context, context.core_static_dir)
+    copy_static_dir(context, context.theme_static_dir)
     copy_static_dir(context, context.user_static_dir)
     for filename in ROOT_STATIC_FILES:
         source = context.root_dir / filename
@@ -71,16 +71,49 @@ def copy_static_assets(context: BlogContext) -> None:
             shutil.copy2(source, context.output_dir / filename)
 
 
+def _compile_theme_entry(
+    context: BlogContext,
+    name: str,
+    source: str,
+    output_file: Path,
+) -> None:
+    entries_dir = context.generated_posts_file.parent / "entries"
+    entries_dir.mkdir(parents=True, exist_ok=True)
+    entry_file = entries_dir / f"{name}.typ"
+    entry_file.write_text(source, encoding="utf-8")
+    try:
+        run_typst(
+            context,
+            "compile",
+            "--features",
+            "html",
+            "--format",
+            "html",
+            "--root",
+            ".",
+            str(entry_file.relative_to(context.root_dir)),
+            str(output_file.relative_to(context.root_dir)),
+        )
+    finally:
+        entry_file.unlink(missing_ok=True)
+        try:
+            entries_dir.rmdir()
+        except OSError:
+            pass
+
+
 def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
     lines = [
-        '#import "/vendor/typst-blog-core/typst/core/tag.typ": tag-page',
-        "#show: tag-page.with(",
+        '#import "/theme/theme.typ": render-tag',
+        '#import "/vendor/typst-blog-core/typst/core/page-data.typ": tag-page-data',
+        "#render-tag(tag-page-data(",
         f"  tag: {typst_string(tag)},",
         f"  tag-slug: {typst_string(tag_slug)},",
         "  posts: (",
     ]
     for post in tag_posts:
         tags = post["tags"]
+        update = post["update"]
         tag_value = (
             "("
             + ", ".join(typst_string(value) for value in tags)
@@ -95,25 +128,27 @@ def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
                 f"      url-slug: {typst_string(post['url_slug'])},",
                 f"      title: {typst_string(post['title'])},",
                 f"      create: {format_typst_calver(post['create'])},",
+                f"      update: {format_typst_calver(update) if update else 'none'},",
                 f"      description: {typst_string(post['description'])},",
                 f"      tags: {tag_value},",
                 f"      draft: {'true' if post['draft'] else 'false'},",
                 "    ),",
             ]
         )
-    lines.extend(["  )", ")"])
+    lines.extend(["  )", "))"])
     return "\n".join(lines) + "\n"
 
 
 def _tags_index_content(tags_with_counts: list[tuple[str, str, int]]) -> str:
     lines = [
-        '#import "/vendor/typst-blog-core/typst/core/tags-index.typ": tags-index-page',
-        "#show: tags-index-page.with(",
+        '#import "/theme/theme.typ": render-tags-index',
+        '#import "/vendor/typst-blog-core/typst/core/page-data.typ": tags-index-page-data',
+        "#render-tags-index(tags-index-page-data(",
         "  tags: (",
     ]
     for tag, slug, count in tags_with_counts:
         lines.append(f"    {typst_string(tag)}: (slug: {typst_string(slug)}, count: {count}),")
-    lines.extend(["  )", ")"])
+    lines.extend(["  )", "))"])
     return "\n".join(lines) + "\n"
 
 
@@ -140,76 +175,48 @@ def build_tag_pages(
         slug = tag_slugs[tag]
         tag_output_dir = tags_dir / slug
         tag_output_dir.mkdir(parents=True, exist_ok=True)
-        temp_file = context.root_dir / f"_tag_build_{index}.typ"
-        temp_file.write_text(_tag_page_content(tag, slug, posts_for_tag), encoding="utf-8")
         print(f"Building tag page: #{tag}")
-        try:
-            run_typst(
-                context,
-                "compile",
-                "--features",
-                "html",
-                "--format",
-                "html",
-                "--root",
-                ".",
-                str(temp_file.relative_to(context.root_dir)),
-                str((tag_output_dir / "index.html").relative_to(context.root_dir)),
-            )
-        finally:
-            temp_file.unlink(missing_ok=True)
+        _compile_theme_entry(
+            context,
+            f"tag-{index}",
+            _tag_page_content(tag, slug, posts_for_tag),
+            tag_output_dir / "index.html",
+        )
 
     tags_with_counts = sorted(
         [(tag, tag_slugs[tag], len(posts_for_tag)) for tag, posts_for_tag in tag_posts.items()],
         key=lambda value: value[0].lower(),
     )
-    temp_file = context.root_dir / "_tags_index_build.typ"
-    temp_file.write_text(_tags_index_content(tags_with_counts), encoding="utf-8")
     print("Building tags index page...")
-    try:
-        run_typst(
-            context,
-            "compile",
-            "--features",
-            "html",
-            "--format",
-            "html",
-            "--root",
-            ".",
-            str(temp_file.relative_to(context.root_dir)),
-            str((tags_dir / "index.html").relative_to(context.root_dir)),
-        )
-    finally:
-        temp_file.unlink(missing_ok=True)
+    _compile_theme_entry(
+        context,
+        "tags-index",
+        _tags_index_content(tags_with_counts),
+        tags_dir / "index.html",
+    )
     print(f"Built {len(tag_posts)} tag page(s).")
 
 
 def build_static_pages(context: BlogContext) -> None:
-    run_typst(
+    _compile_theme_entry(
         context,
-        "compile",
-        "--features",
-        "html",
-        "--format",
-        "html",
-        "--root",
-        ".",
-        "index.typ",
-        str((context.output_dir / "index.html").relative_to(context.root_dir)),
+        "home",
+        '''#import "/theme/theme.typ": render-home
+#import "/vendor/typst-blog-core/typst/core/page-data.typ": home-page-data
+#import "/typst/generated/posts.typ": post-data
+#render-home(home-page-data(posts: post-data))
+''',
+        context.output_dir / "index.html",
     )
-    if (context.root_dir / "404.typ").exists():
-        run_typst(
-            context,
-            "compile",
-            "--features",
-            "html",
-            "--format",
-            "html",
-            "--root",
-            ".",
-            "404.typ",
-            str((context.output_dir / "404.html").relative_to(context.root_dir)),
-        )
+    _compile_theme_entry(
+        context,
+        "not-found",
+        '''#import "/theme/theme.typ": render-not-found
+#import "/vendor/typst-blog-core/typst/core/page-data.typ": not-found-page-data
+#render-not-found(not-found-page-data())
+''',
+        context.output_dir / "404.html",
+    )
     copy_static_assets(context)
 
 
@@ -281,6 +288,7 @@ def build(
     apply_update_policy(context, site, posts)
     tag_slugs = build_tag_slug_map(posts)
     validate_post_output_routes(posts, context.user_static_dir)
+    validate_post_output_routes(posts, context.theme_static_dir)
     published_count = sum(1 for post in posts if not post["draft"])
     print(f"Found {len(posts)} posts ({published_count} published).")
 
