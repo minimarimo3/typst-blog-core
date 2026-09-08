@@ -10,7 +10,13 @@ const COPY_LABELS = {
 
 export function initCodeCopy() {
   const language = document.documentElement.lang || "ja";
-  const labels = COPY_LABELS[language] ?? COPY_LABELS.ja;
+  const subtags = language.split("-");
+  const region = subtags.slice(1).find((subtag) => /^[A-Za-z]{2}$/.test(subtag));
+  const regionalLanguage = region ? `${subtags[0].toLowerCase()}-${region.toUpperCase()}` : null;
+  const labels = COPY_LABELS[language]
+    ?? (regionalLanguage ? COPY_LABELS[regionalLanguage] : undefined)
+    ?? COPY_LABELS[subtags[0].toLowerCase()]
+    ?? COPY_LABELS.ja;
 
   document.querySelectorAll("pre").forEach((pre) => {
     const wrapper = document.createElement("div");

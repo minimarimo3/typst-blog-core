@@ -14,7 +14,7 @@
 ) = context {
   let page-title = "#" + tag + " | " + site.title
   set document(title: page-title, author: site.author.name)
-  set text(lang: site.language)
+  set text(..site.language)
 
   if export-target() == "paged" {
     set text(font: main-font, size: 12pt)

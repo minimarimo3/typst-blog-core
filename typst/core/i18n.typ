@@ -214,7 +214,8 @@
 )
 
 // Falls back to Japanese for unrecognized language codes.
-#let i18n = _translations.at(site.language, default: _translations.ja)
+#import "language.typ": translation-language
+#let i18n = _translations.at(translation-language(site.language, _translations))
 
 // Renders a coverage table comparing each non-Japanese language against Japanese.
 // Use in a paged document (e.g. typst compile docs/i18n-check.typ).

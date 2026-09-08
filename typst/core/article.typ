@@ -83,7 +83,7 @@
   let document-authors = if authors == none { (site.author.name,) } else { authors }
   set document(title: title, author: document-authors)
   set heading(numbering: "1.")
-  set text(lang: site.language, font: main-font)
+  set text(font: main-font, ..site.language)
   show heading: set text(font: heading-font)
   show figure.where(kind: table): set figure.caption(position: top)
   show figure.where(kind: raw): set figure(supplement: i18n.code)

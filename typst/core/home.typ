@@ -18,10 +18,10 @@
   let document-authors = if authors == none { (site.author.name,) } else { authors }
 
   set document(title: page-title, author: document-authors)
-  set text(lang: site.language)
+  set text(..site.language)
 
   if export-target() == "paged" {
-    set text(font: main-font, size: 12pt, lang: site.language)
+    set text(font: main-font, size: 12pt, ..site.language)
     show heading: set text(font: heading-font)
     body
     return

@@ -1,5 +1,6 @@
 #import "/site.typ": site
 #import "shared.typ": calver-iso-datetime
+#import "language.typ": html-language
 
 #let _article-url(url-slug) = {
   site.base_url + "/" + url-slug + "/"
@@ -85,7 +86,7 @@
       "@id": page-url,
     ),
     url: page-url,
-    inLanguage: site.language,
+    inLanguage: html-language(site.language),
   )
 
   if image-url != none and image-url != "" {

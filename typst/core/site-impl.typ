@@ -3,7 +3,7 @@
 /// - title (str): サイトタイトル（空文字不可）
 /// - description (str): サイト説明文（空文字不可）
 /// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュなし
-/// - language (str): サイト言語コード（例: `"ja"`, `"en"`）
+/// - language (str, dictionary): `"ja"`、または Typst の `text` と同じ `lang` / `region` / `script` を持つ辞書
 /// - theme (str): テーマ名。英数字・`_`・`-` のみ使用可（例: `"dark"`, `"light"`）
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
 /// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
@@ -45,6 +45,12 @@
     u == "" or u.starts-with("https://") or u.starts-with("http://"),
     message: "site." + f + ": URL は https:// または http:// で始まる必要があります",
   )
+  let _ascii-letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  let _language-code = (value, lengths) => (
+    type(value) == str
+      and value.len() in lengths
+      and value.clusters().all(character => _ascii-letters.contains(character))
+  )
 
   // 必須文字列
   _req(title,       "title")
@@ -55,7 +61,37 @@
     message: "site.base_url: https:// または http:// で始まる必要があります",
   )
   assert(not base_url.ends-with("/"), message: "site.base_url: 末尾にスラッシュは不要です")
-  _req(language, "language")
+  let language = if type(language) == str {
+    (lang: language, region: none, script: auto)
+  } else {
+    assert(type(language) == dictionary, message: "site.language: 文字列か辞書が必要です")
+    assert(
+      language.keys().all(key => key in ("lang", "region", "script")),
+      message: "site.language: lang, region, script 以外のキーは使用できません",
+    )
+    (
+      lang: language.at("lang", default: none),
+      region: language.at("region", default: none),
+      script: language.at("script", default: auto),
+    )
+  }
+  assert(
+    _language-code(language.lang, (2, 3)),
+    message: "site.language.lang: 2文字か3文字の ISO 639 言語コードが必要です",
+  )
+  assert(
+    language.region == none or _language-code(language.region, (2,)),
+    message: "site.language.region: none か2文字の ISO 3166-1 alpha-2 コードが必要です",
+  )
+  assert(
+    language.script == auto or _language-code(language.script, (4,)),
+    message: "site.language.script: auto か4文字の OpenType スクリプトタグが必要です",
+  )
+  language = (
+    lang: lower(language.lang),
+    region: if language.region == none { none } else { upper(language.region) },
+    script: if language.script == auto { auto } else { lower(language.script) },
+  )
   assert(default_og_image == none or type(default_og_image) == str, message: "site.default_og_image: none か文字列が必要です")
   _req(posts_dir, "posts_dir")
   assert(update_policy == "git" or update_policy == "manual", message: "site.update_policy: git または manual が必要です")

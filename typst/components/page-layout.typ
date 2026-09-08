@@ -1,4 +1,5 @@
 #import "/site.typ": site
+#import "../core/language.typ": html-language
 
 #let page-layout(
   head-content: none,
@@ -11,7 +12,7 @@
   assert(main-content != none, message: "page-layout: main-content is required")
   assert(sidebar-content != none, message: "page-layout: sidebar-content is required")
 
-  html.html(lang: site.language, {
+  html.html(lang: html-language(site.language), {
     html.head(head-content)
     html.body({
       if before-content != none {
