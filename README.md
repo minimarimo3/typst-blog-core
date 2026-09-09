@@ -44,6 +44,12 @@ Preview mode builds the site for `/`, starts a server at
 after successful rebuilds. Canonical URLs, RSS, and sitemap keep using the
 public `base_url` from `site.typ`.
 
+After the initial build, preview recompiles only one changed post or page when
+its metadata and routes are unchanged. Static assets are synchronized directly.
+Changes to metadata, shared Typst sources, site configuration, content layout,
+or preview build hooks automatically fall back to a full preview build. The
+production `build` command always remains a clean full build.
+
 Preview builds include drafts and label them on post cards and article pages.
 Draft pages use `noindex` and are excluded from Pagefind. Regular builds keep
 excluding drafts from pages, tag routes, RSS, and sitemap output.

@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import functools
 import http.server
+import shutil
 import sys
 import threading
 import time
 from pathlib import Path
 
-from .builder import build
-from .context import BlogContext
-from .metadata import load_site_config
+from .builder import (
+    PreparedBuild,
+    build_page,
+    build_post,
+    build_prepared,
+    prepare_build,
+)
+from .context import BlogContext, ROOT_STATIC_FILES
+from .metadata import PostRecord, validate_extension_assets, validate_post_output_routes
 
 
 PREVIEW_HOST = "127.0.0.1"
@@ -19,6 +26,17 @@ PREVIEW_VERSION_PATH = "/__typst_blog_preview_version"
 PREVIEW_SCRIPT_PATH = "/__typst_blog_preview.js"
 PREVIEW_SOURCE_SUFFIXES = frozenset({".css", ".typ", ".py"})
 PREVIEW_IGNORED_DIRS = {".git", "__pycache__", ".build", "public"}
+
+
+def _full_preview_build(root_dir: Path) -> PreparedBuild:
+    print("Starting build...")
+    prepared = prepare_build(
+        root_dir=root_dir,
+        base_path="",
+        include_drafts=True,
+        mode="preview",
+    )
+    return build_prepared(prepared)
 
 
 class _PreviewState:
@@ -104,7 +122,7 @@ def _preview_snapshot(
                 continue
             if (
                 path.suffix.lower() not in asset_extensions | PREVIEW_SOURCE_SUFFIXES
-                and relative.parts[:1] != ("static",)
+                and _static_output_path(relative) is None
             ):
                 continue
             stat = path.stat()
@@ -114,28 +132,217 @@ def _preview_snapshot(
     return snapshot
 
 
+def _changed_paths(
+    before: dict[str, tuple[int, int]],
+    after: dict[str, tuple[int, int]],
+) -> set[Path]:
+    return {
+        Path(path)
+        for path in before.keys() | after.keys()
+        if before.get(path) != after.get(path)
+    }
+
+
+def _static_output_path(relative: Path) -> Path | None:
+    parts = relative.parts
+    if parts[:2] == ("theme", "static"):
+        return Path(*parts[2:])
+    if parts[:1] == ("static",):
+        return Path(*parts[1:])
+    if len(parts) == 1 and parts[0] in ROOT_STATIC_FILES:
+        return relative
+    return None
+
+
+def _preferred_static_source(context: BlogContext, output_path: Path) -> Path | None:
+    candidates = []
+    if len(output_path.parts) == 1 and output_path.name in ROOT_STATIC_FILES:
+        candidates.append(context.root_dir / output_path)
+    candidates.extend(
+        (
+            context.user_static_dir / output_path,
+            context.theme_static_dir / output_path,
+        )
+    )
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _remove_empty_parents(path: Path, stop: Path) -> None:
+    parent = path.parent
+    while parent != stop:
+        try:
+            parent.rmdir()
+        except OSError:
+            return
+        parent = parent.parent
+
+
+def _sync_static_changes(prepared: PreparedBuild, changed: set[Path]) -> None:
+    context = prepared.context
+    validate_extension_assets(context)
+    content = [*prepared.posts, *prepared.pages]
+    validate_post_output_routes(content, context.user_static_dir)
+    validate_post_output_routes(content, context.theme_static_dir)
+
+    for relative in changed:
+        output_path = _static_output_path(relative)
+        if output_path is None:
+            raise ValueError(f"not a static preview path: {relative.as_posix()}")
+        destination = context.output_dir / output_path
+        source = _preferred_static_source(context, output_path)
+        if source is None:
+            destination.unlink(missing_ok=True)
+            _remove_empty_parents(destination, context.output_dir)
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+
+def _content_source_file(content: PostRecord | dict) -> Path:
+    return (
+        content.source_file
+        if isinstance(content, PostRecord)
+        else content["source_file"]
+    )
+
+
+def _content_source_dir(content: PostRecord | dict) -> Path:
+    return (
+        content.source_dir
+        if isinstance(content, PostRecord)
+        else content["source_dir"]
+    )
+
+
+def _content_route_path(content: PostRecord | dict) -> str:
+    return (
+        content.route_path
+        if isinstance(content, PostRecord)
+        else content["route_path"]
+    )
+
+
+def _changed_content(
+    prepared: PreparedBuild,
+    changed: set[Path],
+) -> PostRecord | dict | None:
+    content = [*prepared.posts, *prepared.pages]
+    owners: list[PostRecord | dict] = []
+    for relative in changed:
+        absolute = prepared.context.root_dir / relative
+        candidates = [
+            item
+            for item in content
+            if absolute.is_relative_to(_content_source_dir(item))
+        ]
+        if not candidates:
+            return None
+        owners.append(
+            max(candidates, key=lambda item: len(_content_source_dir(item).parts))
+        )
+    source_files = {_content_source_file(item) for item in owners}
+    return owners[0] if len(source_files) == 1 else None
+
+
+def _same_incremental_inputs(before: PreparedBuild, after: PreparedBuild) -> bool:
+    return (
+        before.site == after.site
+        and before.asset_extensions == after.asset_extensions
+        and before.posts == after.posts
+        and before.pages == after.pages
+        and before.tag_slugs == after.tag_slugs
+        and before.active_posts == after.active_posts
+        and before.active_pages == after.active_pages
+    )
+
+
+def _sync_removed_content_assets(
+    prepared: PreparedBuild,
+    content: PostRecord | dict,
+    changed: set[Path],
+) -> None:
+    source_dir = _content_source_dir(content)
+    source_file = _content_source_file(content)
+    output_dir = prepared.context.output_dir / _content_route_path(content)
+    for relative in changed:
+        source = prepared.context.root_dir / relative
+        if source == source_file or source.exists():
+            continue
+        asset_relative = source.relative_to(source_dir)
+        if source.suffix.lower() not in prepared.asset_extensions:
+            continue
+        destination = output_dir / asset_relative
+        destination.unlink(missing_ok=True)
+        _remove_empty_parents(destination, output_dir)
+
+
+def _rebuild_preview_changes(
+    root_dir: Path,
+    previous: PreparedBuild,
+    changed: set[Path],
+) -> PreparedBuild:
+    if (
+        changed
+        and all(_static_output_path(path) is not None for path in changed)
+        and previous.supports_incremental_preview()
+    ):
+        _sync_static_changes(previous, changed)
+        print(f"Updated {len(changed)} static file(s).")
+        return previous
+
+    content = _changed_content(previous, changed)
+    if content is None or not previous.supports_incremental_preview():
+        print("Change requires a full preview rebuild.")
+        return _full_preview_build(root_dir)
+
+    current = prepare_build(
+        root_dir=root_dir,
+        base_path="",
+        include_drafts=True,
+        mode="preview",
+    )
+    if not current.supports_incremental_preview() or not _same_incremental_inputs(
+        previous, current
+    ):
+        print("Metadata, routes, or preview hooks changed; rebuilding all pages.")
+        return build_prepared(current)
+
+    source_file = _content_source_file(content)
+    current_content = next(
+        item
+        for item in [*current.posts, *current.pages]
+        if _content_source_file(item) == source_file
+    )
+    if isinstance(current_content, PostRecord):
+        build_post(current.context, current_content, current.asset_extensions)
+    else:
+        build_page(current.context, current_content, current.asset_extensions)
+    _sync_removed_content_assets(current, current_content, changed)
+    print(f"Updated content: {source_file.relative_to(root_dir)}")
+    return current
+
+
 def _watch_preview(
     root_dir: Path,
     state: _PreviewState,
-    asset_extensions: frozenset[str],
+    prepared: PreparedBuild,
 ) -> None:
+    asset_extensions = prepared.asset_extensions
     snapshot = _preview_snapshot(root_dir, asset_extensions)
     while True:
         time.sleep(0.5)
         next_snapshot = _preview_snapshot(root_dir, asset_extensions)
         if next_snapshot == snapshot:
             continue
+        changed = _changed_paths(snapshot, next_snapshot)
         time.sleep(0.2)
         print("Change detected. Rebuilding preview...")
         try:
-            build(root_dir=root_dir, base_path="", include_drafts=True, mode="preview")
+            prepared = _rebuild_preview_changes(root_dir, prepared, changed)
         except Exception as exc:
             print(f"Preview rebuild failed: {exc}", file=sys.stderr)
         else:
-            context = BlogContext.create(root_dir)
-            asset_extensions = frozenset(
-                load_site_config(context)["asset_extensions"]
-            )
+            asset_extensions = prepared.asset_extensions
             state.mark_rebuilt()
             print("Preview updated.")
         snapshot = _preview_snapshot(root_dir, asset_extensions)
@@ -143,8 +350,7 @@ def _watch_preview(
 
 def preview(root_dir: Path | str | None = None) -> None:
     context = BlogContext.create(root_dir, base_path="")
-    asset_extensions = frozenset(load_site_config(context)["asset_extensions"])
-    build(root_dir=context.root_dir, base_path="", include_drafts=True, mode="preview")
+    prepared = _full_preview_build(context.root_dir)
     state = _PreviewState()
     _PreviewRequestHandler.preview_state = state
     handler = functools.partial(_PreviewRequestHandler, directory=str(context.output_dir))
@@ -164,7 +370,7 @@ def preview(root_dir: Path | str | None = None) -> None:
 
     watcher = threading.Thread(
         target=_watch_preview,
-        args=(context.root_dir, state, asset_extensions),
+        args=(context.root_dir, state, prepared),
         daemon=True,
     )
     watcher.start()

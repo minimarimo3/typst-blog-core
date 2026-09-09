@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
 from urllib.parse import urlsplit
@@ -32,6 +33,34 @@ from .pipeline import (
     PlannedOutput,
     load_pipeline,
 )
+
+
+@dataclass(frozen=True)
+class PreparedBuild:
+    """Validated inputs and planned outputs for one site build."""
+
+    context: BlogContext
+    mode: BuildMode
+    include_drafts: bool
+    site: dict
+    asset_extensions: frozenset[str]
+    posts: list[PostRecord]
+    pages: list[dict]
+    active_posts: list[PostRecord]
+    active_pages: list[dict]
+    tag_slugs: dict[str, str]
+    pipeline: Pipeline
+    post_outputs: dict[str, list[PlannedOutput]]
+    site_outputs: list[PlannedOutput]
+
+    def supports_incremental_preview(self) -> bool:
+        return (
+            self.mode == "preview"
+            and not any(self.post_outputs.values())
+            and not self.site_outputs
+            and not self.pipeline.active_after_html("preview")
+            and not self.pipeline.active_post_build("preview")
+        )
 
 
 def copy_content_assets(
@@ -480,17 +509,16 @@ def _run_post_build(pipeline: Pipeline, task: BuildTask) -> None:
         hook.run(task)
 
 
-def build(
+def prepare_build(
     root_dir: Path | str | None = None,
     base_path: str | None = None,
     *,
     include_drafts: bool = False,
     mode: BuildMode = "build",
-) -> None:
+) -> PreparedBuild:
     if mode not in {"build", "preview"}:
         raise ValueError("build mode must be 'build' or 'preview'")
     context = BlogContext.create(root_dir, base_path)
-    print("Starting build...")
     site = load_site_config(context)
     asset_extensions = frozenset(site["asset_extensions"])
     validate_extension_assets(context)
@@ -520,6 +548,38 @@ def build(
             asset_extensions,
         ),
     )
+
+    return PreparedBuild(
+        context=context,
+        mode=mode,
+        include_drafts=include_drafts,
+        site=site,
+        asset_extensions=asset_extensions,
+        posts=posts,
+        pages=pages,
+        active_posts=active_posts,
+        active_pages=active_pages,
+        tag_slugs=tag_slugs,
+        pipeline=pipeline,
+        post_outputs=post_outputs,
+        site_outputs=site_outputs,
+    )
+
+
+def build_prepared(prepared: PreparedBuild) -> PreparedBuild:
+    context = prepared.context
+    mode = prepared.mode
+    include_drafts = prepared.include_drafts
+    site = prepared.site
+    asset_extensions = prepared.asset_extensions
+    posts = prepared.posts
+    pages = prepared.pages
+    active_posts = prepared.active_posts
+    active_pages = prepared.active_pages
+    tag_slugs = prepared.tag_slugs
+    pipeline = prepared.pipeline
+    post_outputs = prepared.post_outputs
+    site_outputs = prepared.site_outputs
 
     if context.build_dir.exists():
         shutil.rmtree(context.build_dir)
@@ -568,3 +628,21 @@ def build(
     _run_after_html(pipeline, task)
     _run_post_build(pipeline, task)
     print("Build complete.")
+    return prepared
+
+
+def build(
+    root_dir: Path | str | None = None,
+    base_path: str | None = None,
+    *,
+    include_drafts: bool = False,
+    mode: BuildMode = "build",
+) -> None:
+    print("Starting build...")
+    prepared = prepare_build(
+        root_dir=root_dir,
+        base_path=base_path,
+        include_drafts=include_drafts,
+        mode=mode,
+    )
+    build_prepared(prepared)
