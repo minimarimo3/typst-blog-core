@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Sequence
 from urllib.parse import quote
 
-from .context import BlogContext, run_typst
+from .context import BlogContext, ROOT_STATIC_FILES, run_typst
 
 
 SITE_METADATA_LABEL = "<site-meta>"
@@ -30,7 +30,18 @@ EXCLUDED_DIRS = {
 }
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
 TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
-GENERATED_ROUTE_NAMES = {"color-schemes", "pagefind", "scripts", "styles", "tags"}
+GENERATED_ROUTE_NAMES = {
+    "404.html",
+    "color-schemes",
+    "feed.xml",
+    "index.html",
+    "pagefind",
+    "scripts",
+    "sitemap.xml",
+    "styles",
+    "tags",
+    *(filename.casefold() for filename in ROOT_STATIC_FILES),
+}
 PORTABLE_RESERVED_NAMES = {
     "aux",
     "con",

@@ -65,9 +65,20 @@ class PostSlugTests(unittest.TestCase):
 
     def test_rejects_generated_and_portability_reservations(self) -> None:
         for slug in (
+            "index.html",
+            "404.html",
+            "feed.xml",
+            "FEED.XML",
+            "sitemap.xml",
             "tags",
             "pagefind",
             "color-schemes",
+            "CNAME",
+            "favicon.ico",
+            "favicon.svg",
+            "robots.txt",
+            "site.webmanifest",
+            "manifest.webmanifest",
             "con",
             "con.txt",
             "con .txt",
