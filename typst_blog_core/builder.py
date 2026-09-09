@@ -5,15 +5,15 @@ import shutil
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from .context import BlogContext, ROOT_STATIC_FILES, STATIC_EXTENSIONS, run_typst
+from .context import BlogContext, ROOT_STATIC_FILES, run_typst
 from .git_dates import apply_update_policy
 from .metadata import (
     build_tag_slug_map,
     collect_pages,
     collect_posts,
-    format_typst_json,
-    format_typst_calver,
+    format_post_typst_record,
     load_site_config,
+    PostRecord,
     resolve_posts_dir,
     typst_string,
     validate_post_output_routes,
@@ -28,27 +28,40 @@ from .pipeline import (
     OutputTask,
     Pipeline,
     PlannedOutput,
-    PostInfo,
     load_pipeline,
 )
 
 
-def copy_content_assets(content: dict, output_dir: Path) -> None:
-    for asset in content["source_dir"].rglob("*"):
-        if not asset.is_file() or asset == content["source_file"]:
+def copy_content_assets(
+    content: dict | PostRecord,
+    output_dir: Path,
+    asset_extensions: frozenset[str],
+) -> None:
+    source_dir = (
+        content.source_dir if isinstance(content, PostRecord) else content["source_dir"]
+    )
+    source_file = (
+        content.source_file if isinstance(content, PostRecord) else content["source_file"]
+    )
+    for asset in source_dir.rglob("*"):
+        if not asset.is_file() or asset == source_file:
             continue
-        if asset.suffix.lower() not in STATIC_EXTENSIONS:
+        if asset.suffix.lower() not in asset_extensions:
             continue
-        destination = output_dir / asset.relative_to(content["source_dir"])
+        destination = output_dir / asset.relative_to(source_dir)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(asset, destination)
 
 
-def build_post(context: BlogContext, post: dict) -> None:
-    output_dir = context.output_dir / post["slug"]
+def build_post(
+    context: BlogContext,
+    post: PostRecord,
+    asset_extensions: frozenset[str],
+) -> None:
+    output_dir = context.output_dir / post.slug
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "index.html"
-    print(f"Compiling: {post['title']}")
+    print(f"Compiling: {post.title}")
     run_typst(
         context,
         "compile",
@@ -58,13 +71,17 @@ def build_post(context: BlogContext, post: dict) -> None:
         "html",
         "--root",
         ".",
-        str(post["source_file"].relative_to(context.root_dir)),
+        str(post.source_file.relative_to(context.root_dir)),
         str(output_file.relative_to(context.root_dir)),
     )
-    copy_content_assets(post, output_dir)
+    copy_content_assets(post, output_dir, asset_extensions)
 
 
-def build_page(context: BlogContext, page: dict) -> None:
+def build_page(
+    context: BlogContext,
+    page: dict,
+    asset_extensions: frozenset[str],
+) -> None:
     output_dir = context.output_dir / page["slug"]
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "index.html"
@@ -81,7 +98,7 @@ def build_page(context: BlogContext, page: dict) -> None:
         str(page["source_file"].relative_to(context.root_dir)),
         str(output_file.relative_to(context.root_dir)),
     )
-    copy_content_assets(page, output_dir)
+    copy_content_assets(page, output_dir, asset_extensions)
 
 
 def copy_static_dir(context: BlogContext, source_dir: Path) -> None:
@@ -106,22 +123,23 @@ def copy_static_assets(context: BlogContext) -> None:
 
 def reserved_output_paths(
     context: BlogContext,
-    posts: list[dict],
+    posts: list[PostRecord],
     pages: list[dict],
     tag_slugs: dict[str, str],
+    asset_extensions: frozenset[str],
 ) -> set[str]:
     paths = {"index.html", "404.html", "feed.xml", "sitemap.xml", "tags/index.html"}
     for post in posts:
-        paths.add(f"{post['slug']}/index.html")
-        for asset in post["source_dir"].rglob("*"):
+        paths.add(f"{post.slug}/index.html")
+        for asset in post.source_dir.rglob("*"):
             if (
                 asset.is_file()
-                and asset != post["source_file"]
-                and asset.suffix.lower() in STATIC_EXTENSIONS
+                and asset != post.source_file
+                and asset.suffix.lower() in asset_extensions
             ):
-                relative = asset.relative_to(post["source_dir"]).as_posix()
-                paths.add(f"{post['slug']}/{relative}")
-        for tag in post["tags"]:
+                relative = asset.relative_to(post.source_dir).as_posix()
+                paths.add(f"{post.slug}/{relative}")
+        for tag in post.tags:
             paths.add(f"tags/{tag_slugs[tag]}/index.html")
     for page in pages:
         paths.add(f"{page['slug']}/index.html")
@@ -129,7 +147,7 @@ def reserved_output_paths(
             if (
                 asset.is_file()
                 and asset != page["source_file"]
-                and asset.suffix.lower() in STATIC_EXTENSIONS
+                and asset.suffix.lower() in asset_extensions
             ):
                 relative = asset.relative_to(page["source_dir"]).as_posix()
                 paths.add(f"{page['slug']}/{relative}")
@@ -179,7 +197,12 @@ def _compile_theme_entry(
             pass
 
 
-def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
+def _tag_page_content(
+    context: BlogContext,
+    tag: str,
+    tag_slug: str,
+    tag_posts: list[PostRecord],
+) -> str:
     lines = [
         '#import "/theme/theme.typ": render-tag, core',
         "#render-tag(core.tag-page-data(",
@@ -188,30 +211,7 @@ def _tag_page_content(tag: str, tag_slug: str, tag_posts: list[dict]) -> str:
         "  posts: (",
     ]
     for post in tag_posts:
-        tags = post["tags"]
-        update = post["update"]
-        tag_value = (
-            "("
-            + ", ".join(typst_string(value) for value in tags)
-            + ("," if len(tags) == 1 else "")
-            + ")"
-            if tags
-            else "()"
-        )
-        lines.extend(
-            [
-                f"    {typst_string(post['slug'])}: (",
-                f"      url-slug: {typst_string(post['url_slug'])},",
-                f"      title: {typst_string(post['title'])},",
-                f"      create: {format_typst_calver(post['create'])},",
-                f"      update: {format_typst_calver(update) if update else 'none'},",
-                f"      description: {typst_string(post['description'])},",
-                f"      tags: {tag_value},",
-                f"      draft: {'true' if post['draft'] else 'false'},",
-                f"      extra: {format_typst_json(post['extra'])},",
-                "    ),",
-            ]
-        )
+        lines.extend(format_post_typst_record(context, post, indent="    "))
     lines.extend(["  )", "))"])
     return "\n".join(lines) + "\n"
 
@@ -230,17 +230,17 @@ def _tags_index_content(tags_with_counts: list[tuple[str, str, int]]) -> str:
 
 def build_tag_pages(
     context: BlogContext,
-    posts: list[dict],
+    posts: list[PostRecord],
     tag_slugs: dict[str, str],
     *,
     include_drafts: bool = False,
 ) -> None:
-    tag_posts: dict[str, list[dict]] = {}
+    tag_posts: dict[str, list[PostRecord]] = {}
     visible_posts = (
-        posts if include_drafts else (post for post in posts if not post["draft"])
+        posts if include_drafts else (post for post in posts if not post.draft)
     )
     for post in visible_posts:
-        for tag in post["tags"]:
+        for tag in post.tags:
             tag_posts.setdefault(tag, []).append(post)
     if not tag_posts:
         return
@@ -255,7 +255,7 @@ def build_tag_pages(
         _compile_theme_entry(
             context,
             f"tag-{index}",
-            _tag_page_content(tag, slug, posts_for_tag),
+            _tag_page_content(context, tag, slug, posts_for_tag),
             tag_output_dir / "index.html",
         )
 
@@ -302,7 +302,7 @@ def build_static_pages(context: BlogContext) -> None:
     copy_static_assets(context)
 
 
-def generate_rss(context: BlogContext, site: dict, posts: list[dict]) -> None:
+def generate_rss(context: BlogContext, site: dict, posts: list[PostRecord]) -> None:
     now = dt.datetime.now(dt.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
     base_url = site["base_url"]
     xml = f"""<?xml version="1.0" encoding="UTF-8" ?>
@@ -313,14 +313,14 @@ def generate_rss(context: BlogContext, site: dict, posts: list[dict]) -> None:
   <description>{escape(site["description"])}</description>
   <lastBuildDate>{now}</lastBuildDate>
 """
-    for post in (post for post in posts if not post["draft"]):
-        link = f"{base_url}/{post['url_slug']}/"
-        pub_date = post["create"].as_datetime().strftime("%a, %d %b %Y 00:00:00 GMT")
+    for post in (post for post in posts if not post.draft):
+        link = f"{base_url}/{post.url_slug}/"
+        pub_date = post.create.as_datetime().strftime("%a, %d %b %Y 00:00:00 GMT")
         xml += f"""  <item>
-    <title>{escape(post["title"])}</title>
+    <title>{escape(post.title)}</title>
     <link>{escape(link)}</link>
     <guid isPermaLink="true">{escape(link)}</guid>
-    <description>{escape(post["description"])}</description>
+    <description>{escape(post.description)}</description>
     <pubDate>{pub_date}</pubDate>
   </item>
 """
@@ -331,7 +331,7 @@ def generate_rss(context: BlogContext, site: dict, posts: list[dict]) -> None:
 def generate_sitemap(
     context: BlogContext,
     site: dict,
-    posts: list[dict],
+    posts: list[PostRecord],
     pages: list[dict],
 ) -> None:
     base_url = site["base_url"]
@@ -342,12 +342,12 @@ def generate_sitemap(
     <priority>1.0</priority>
   </url>
 """
-    for post in (post for post in posts if not post["draft"]):
-        link = f"{base_url}/{post['url_slug']}/"
+    for post in (post for post in posts if not post.draft):
+        link = f"{base_url}/{post.url_slug}/"
         last_mod_value = (
-            post["update"].as_datetime()
-            if post["update"]
-            else post["create"].as_datetime()
+            post.update.as_datetime()
+            if post.update
+            else post.create.as_datetime()
         )
         last_mod = last_mod_value.strftime("%Y-%m-%d")
         xml += f"""  <url>
@@ -373,7 +373,7 @@ def _build_task(
     context: BlogContext,
     mode: BuildMode,
     site: dict,
-    posts: list[dict],
+    posts: list[PostRecord],
 ) -> BuildTask:
     return BuildTask(
         root_dir=context.root_dir,
@@ -381,7 +381,7 @@ def _build_task(
         output_dir=context.output_dir,
         mode=mode,
         site=site,
-        posts=tuple(PostInfo.from_post(post) for post in posts),
+        posts=tuple(posts),
         _context=context,
     )
 
@@ -442,6 +442,7 @@ def build(
     context = BlogContext.create(root_dir, base_path)
     print("Starting build...")
     site = load_site_config(context)
+    asset_extensions = frozenset(site["asset_extensions"])
     validate_extension_assets(context)
     posts_dir = resolve_posts_dir(context, site)
     posts = collect_posts(context, posts_dir)
@@ -452,16 +453,22 @@ def build(
     content = posts + pages
     validate_post_output_routes(content, context.user_static_dir)
     validate_post_output_routes(content, context.theme_static_dir)
-    published_count = sum(1 for post in posts if not post["draft"])
+    published_count = sum(1 for post in posts if not post.draft)
     print(f"Found {len(posts)} posts ({published_count} published).")
-    active_posts = posts if include_drafts else [post for post in posts if not post["draft"]]
+    active_posts = posts if include_drafts else [post for post in posts if not post.draft]
     active_pages = pages if include_drafts else [page for page in pages if not page["draft"]]
     pipeline = load_pipeline(context)
     post_outputs, site_outputs = pipeline.plan_outputs(
         context,
         active_posts,
         mode,
-        reserved_output_paths(context, active_posts, active_pages, tag_slugs),
+        reserved_output_paths(
+            context,
+            active_posts,
+            active_pages,
+            tag_slugs,
+            asset_extensions,
+        ),
     )
 
     if context.build_dir.exists():
@@ -491,15 +498,15 @@ def build(
         pages=pages,
     )
     for post in posts:
-        if post["draft"] and not include_drafts:
-            print(f"Draft skip: {post['title']}")
+        if post.draft and not include_drafts:
+            print(f"Draft skip: {post.title}")
         else:
-            build_post(context, post)
+            build_post(context, post, asset_extensions)
     for page in pages:
         if page["draft"] and not include_drafts:
             print(f"Draft page skip: {page['title']}")
         else:
-            build_page(context, page)
+            build_page(context, page, asset_extensions)
     print("Building static pages...")
     build_static_pages(context)
     print("Building tag pages...")

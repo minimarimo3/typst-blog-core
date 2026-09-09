@@ -159,6 +159,11 @@ dedicated directory. It defaults to `"."`; for example, `posts_dir: "posts"`
 makes both `new` and `build` use the `posts/` tree. Only safe relative paths
 inside the blog root are accepted.
 
+The required `asset_extensions` array in the user-owned `site.typ` controls
+which files beside a post or page are copied to its output directory. Core does
+not keep its own extension allowlist; templates can include the image, video,
+audio, font, and download formats their content needs.
+
 Post update dates use `update_policy: "git"` by default. The build follows the
 history of each post's `index.typ` across renames and combines it with commits
 touching other files in the same post directory. The initial post commit does
@@ -253,7 +258,7 @@ The Python builder also writes private intermediate data to
 Themes should consume `data.posts`, `data.post.extra`, `data.post.outputs`, and
 `data.outputs` instead of importing the private generated file. Core validates
 but does not interpret the JSON-compatible dictionary in `extra`; the same
-value is available on post entries in lists and as `PostInfo.extra` in Python
+value is available on post entries in lists and as `PostRecord.extra` in Python
 pipeline callbacks.
 
 User-authored posts should continue to import the root compatibility module:

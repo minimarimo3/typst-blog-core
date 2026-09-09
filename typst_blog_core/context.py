@@ -7,20 +7,6 @@ from pathlib import Path
 
 
 CORE_DIR = Path(__file__).resolve().parent.parent
-STATIC_EXTENSIONS = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".svg",
-    ".webp",
-    ".pdf",
-    ".js",
-    ".yaml",
-    ".yml",
-    ".bib",
-    ".txt",
-}
 ROOT_STATIC_FILES = {
     "CNAME",
     "favicon.ico",

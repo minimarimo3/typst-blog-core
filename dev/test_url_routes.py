@@ -27,6 +27,7 @@ from typst_blog_core.metadata import (  # noqa: E402
     validate_post_tags,
     write_generated_site_data,
 )
+from post_factory import make_post_record  # noqa: E402
 
 
 class PostSlugTests(unittest.TestCase):
@@ -102,12 +103,13 @@ class TagSlugTests(unittest.TestCase):
         self.assertEqual(tag_to_slug("日本語"), "~e697a5e69cace8aa9e")
 
     def test_space_and_hyphen_tags_get_distinct_urls(self) -> None:
-        result = build_tag_slug_map([{"tags": ("foo bar", "foo-bar")}])
+        post = make_post_record(Path.cwd(), tags=("foo bar", "foo-bar"))
+        result = build_tag_slug_map([post])
         self.assertNotEqual(result["foo bar"], result["foo-bar"])
 
     def test_rejects_case_insensitive_filesystem_collision(self) -> None:
         with self.assertRaisesRegex(ValueError, "tag URL collision"):
-            build_tag_slug_map([{"tags": ("Tag", "tag")}])
+            build_tag_slug_map([make_post_record(Path.cwd(), tags=("Tag", "tag"))])
 
     def test_rejects_unicode_equivalent_duplicates_in_one_post(self) -> None:
         with self.assertRaisesRegex(ValueError, "duplicate tag"):
@@ -135,8 +137,11 @@ class PostExtraTests(unittest.TestCase):
                     return_value={
                         "slug": "post",
                         "title": "Post",
+                        "authors": ["Ada", "Grace"],
                         "create": "2026.09.08",
                         "description": "Description",
+                        "abstract": "Summary",
+                        "og-image": "/images/card.png",
                         "draft": False,
                         "extra": extra,
                     },
@@ -144,7 +149,10 @@ class PostExtraTests(unittest.TestCase):
             ):
                 posts = collect_posts(context)
 
-            self.assertEqual(posts[0]["extra"], extra)
+            self.assertEqual(posts[0].extra, extra)
+            self.assertEqual(posts[0].authors, ("Ada", "Grace"))
+            self.assertEqual(posts[0].abstract, "Summary")
+            self.assertEqual(posts[0].og_image, "/images/card.png")
 
     def test_rejects_non_dictionary_or_non_json_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "dictionary"):
@@ -173,18 +181,14 @@ class GeneratedRouteDataTests(unittest.TestCase):
             write_generated_site_data(
                 context,
                 [
-                    {
-                        "slug": "post",
-                        "url_slug": "post",
-                        "title": "Post",
-                        "create": make_calver(2026, 1, 1),
-                        "update": make_calver(2026, 3, 4),
-                        "description": "Description",
-                        "tags": (),
-                        "draft": False,
-                        "extra": {},
-                        "source_file": source,
-                    }
+                    make_post_record(
+                        context.root_dir,
+                        slug="post",
+                        url_slug="post",
+                        create=make_calver(2026, 1, 1),
+                        update=make_calver(2026, 3, 4),
+                        source_file=source,
+                    )
                 ],
                 {},
             )
@@ -193,24 +197,66 @@ class GeneratedRouteDataTests(unittest.TestCase):
                 "update: (year: 2026, month: 3, day: 4, patch: 0)", generated
             )
 
+    def test_article_metadata_is_written_to_site_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            post = make_post_record(
+                context.root_dir,
+                authors=("Ada", "Grace"),
+                abstract="Summary",
+                og_image="/images/card.png",
+            )
+
+            write_generated_site_data(context, [post], {})
+
+            generated = context.generated_site_data_file.read_text(encoding="utf-8")
+            self.assertIn(
+                'authors: json(bytes("[\\\"Ada\\\",\\\"Grace\\\"]"))',
+                generated,
+            )
+            self.assertIn('abstract: json(bytes("\\\"Summary\\\""))', generated)
+            self.assertIn('og-image: "/images/card.png"', generated)
+
+            result = subprocess.run(
+                [
+                    "typst",
+                    "eval",
+                    "--format",
+                    "json",
+                    '{ import "/.build/typst/site-data.typ": posts; '
+                    'let post = posts.at("hello"); '
+                    '(authors: post.authors, abstract: post.abstract, '
+                    'og-image: post.at("og-image")) }',
+                    "--root",
+                    str(context.root_dir),
+                ],
+                check=True,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+            )
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "authors": ["Ada", "Grace"],
+                    "abstract": "Summary",
+                    "og-image": "/images/card.png",
+                },
+            )
+
     def test_extra_outputs_are_written_to_private_build_data(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
             source = context.root_dir / "post" / "index.typ"
             source.parent.mkdir()
             source.write_text("post", encoding="utf-8")
-            post = {
-                "slug": "post",
-                "url_slug": "post",
-                "title": "Post",
-                "create": make_calver(2026, 1, 1),
-                "update": None,
-                "description": "Description",
-                "tags": (),
-                "draft": False,
-                "extra": {},
-                "source_file": source,
-            }
+            post = make_post_record(
+                context.root_dir,
+                slug="post",
+                url_slug="post",
+                create=make_calver(2026, 1, 1),
+                source_file=source,
+            )
             write_generated_site_data(
                 context,
                 [post],
@@ -247,18 +293,14 @@ class GeneratedRouteDataTests(unittest.TestCase):
             write_generated_site_data(
                 context,
                 [
-                    {
-                        "slug": "post",
-                        "url_slug": "post",
-                        "title": "Post",
-                        "create": make_calver(2026, 1, 1),
-                        "update": None,
-                        "description": "Description",
-                        "tags": (),
-                        "draft": False,
-                        "extra": extra,
-                        "source_file": source,
-                    }
+                    make_post_record(
+                        context.root_dir,
+                        slug="post",
+                        url_slug="post",
+                        create=make_calver(2026, 1, 1),
+                        extra=extra,
+                        source_file=source,
+                    )
                 ],
                 {},
             )
@@ -286,18 +328,16 @@ class GeneratedRouteDataTests(unittest.TestCase):
             source = context.root_dir / "draft-post" / "index.typ"
             source.parent.mkdir()
             source.write_text("draft", encoding="utf-8")
-            draft = {
-                "slug": "draft-post",
-                "url_slug": "draft-post",
-                "title": "Draft Post",
-                "create": make_calver(2026, 7, 19),
-                "update": None,
-                "description": "Description",
-                "tags": ("Draft",),
-                "draft": True,
-                "extra": {},
-                "source_file": source,
-            }
+            draft = make_post_record(
+                context.root_dir,
+                slug="draft-post",
+                url_slug="draft-post",
+                title="Draft Post",
+                create=make_calver(2026, 7, 19),
+                tags=("Draft",),
+                draft=True,
+                source_file=source,
+            )
 
             write_generated_site_data(context, [draft], {"Draft": "Draft"})
             published = context.generated_site_data_file.read_text(encoding="utf-8")

@@ -19,6 +19,7 @@ from typst_blog_core.metadata import (  # noqa: E402
     write_generated_site_data,
 )
 from typst_blog_core.new_page import create_page  # noqa: E402
+from post_factory import make_post_record  # noqa: E402
 
 
 class PageMetadataTests(unittest.TestCase):
@@ -52,11 +53,13 @@ class PageMetadataTests(unittest.TestCase):
             self.assertEqual(pages[0]["extra"], {"layout": "wide"})
 
     def test_rejects_post_and_page_route_collision(self) -> None:
-        with self.assertRaisesRegex(ValueError, "content URL collision"):
-            validate_content_route_collisions(
-                [{"slug": "About"}],
-                [{"slug": "about"}],
-            )
+        with tempfile.TemporaryDirectory() as directory:
+            post = make_post_record(Path(directory), slug="About")
+            with self.assertRaisesRegex(ValueError, "content URL collision"):
+                validate_content_route_collisions(
+                    [post],
+                    [{"slug": "about"}],
+                )
 
     def test_generated_data_contains_pages(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

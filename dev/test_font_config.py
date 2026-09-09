@@ -47,6 +47,7 @@ def site_source(web: str) -> str:
   description: "Test site",
   base_url: "https://example.com",
   language: "ja",
+  asset_extensions: (".png",),
   fonts: (
     main: (pdf: "Noto Serif CJK JP", web: {web}, weights: "400;700", fallback: "serif"),
     code: (pdf: "Fira Code", web: ("Fira Code",), weights: none, fallback: none),

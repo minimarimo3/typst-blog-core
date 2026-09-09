@@ -21,6 +21,7 @@ def evaluate_typst(
   description: "Test site",
   base_url: "https://example.com",
   language: {language},
+  asset_extensions: (".png",),
   fonts: (
     main: (pdf: "Noto Serif CJK JP", web: none),
     code: (pdf: "Fira Code", web: none),

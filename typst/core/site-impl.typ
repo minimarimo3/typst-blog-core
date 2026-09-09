@@ -7,6 +7,7 @@
 /// - theme (dictionary): template側themeが定義する設定。coreは内容を解釈しない
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
 /// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
+/// - asset_extensions (array): 記事・固定ページのディレクトリから出力へコピーするファイル拡張子
 /// - default_og_image (str, none): 記事やページに画像指定がないときに使う既定OGP画像 URL
 /// - fonts (dictionary): フォント設定。`main` と `code` キーが必須で、各々 `pdf` フィールドが必要。```typst
 ///   fonts: (
@@ -27,6 +28,7 @@
   theme: (:),
   posts_dir: ".",
   update_policy: "git",
+  asset_extensions: none,
   default_og_image: none,
   fonts: none,
   author: none,
@@ -91,6 +93,20 @@
   assert(default_og_image == none or type(default_og_image) == str, message: "site.default_og_image: none か文字列が必要です")
   _req(posts_dir, "posts_dir")
   assert(update_policy == "git" or update_policy == "manual", message: "site.update_policy: git または manual が必要です")
+  assert(
+    type(asset_extensions) == array and asset_extensions.len() > 0,
+    message: "site.asset_extensions: 空でない配列が必要です",
+  )
+  let _asset-extension-characters = _ascii-letters + "0123456789"
+  for (index, extension) in asset_extensions.enumerate() {
+    assert(
+      type(extension) == str
+        and extension.len() > 1
+        and extension.starts-with(".")
+        and extension.slice(1).clusters().all(character => _asset-extension-characters.contains(character)),
+      message: "site.asset_extensions.at(" + str(index) + "): ドットに続けて英数字の拡張子を指定してください",
+    )
+  }
 
   assert(type(theme) == dictionary, message: "site.theme: theme固有設定の辞書が必要です")
 
@@ -161,7 +177,7 @@
 
   (
     title: title, description: description, base_url: base_url, language: language,
-    theme: theme, posts_dir: posts_dir, update_policy: update_policy, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
+    theme: theme, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
     github_repo: github_repo,
   )
 }

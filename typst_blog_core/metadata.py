@@ -7,6 +7,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Sequence
 from urllib.parse import quote
 
 from .context import BlogContext, run_typst
@@ -41,6 +42,7 @@ PORTABLE_RESERVED_NAMES = {
 RESERVED_POST_DIRS = EXCLUDED_DIRS | {"static", PAGES_DIR_NAME}
 WINDOWS_FORBIDDEN_FILENAME_CHARS = frozenset('<>:"/\\|?*')
 MAX_PORTABLE_FILENAME_BYTES = 255
+ASSET_EXTENSION_RE = re.compile(r"\.[A-Za-z0-9]+")
 
 
 @dataclass(frozen=True, order=True)
@@ -52,6 +54,24 @@ class CalVer:
 
     def as_datetime(self) -> dt.datetime:
         return dt.datetime(self.year, self.month, self.day, tzinfo=dt.timezone.utc)
+
+
+@dataclass(frozen=True)
+class PostRecord:
+    slug: str
+    url_slug: str
+    title: str
+    authors: tuple[str, ...] | None
+    create: CalVer
+    update: CalVer | None
+    description: str
+    abstract: object | None
+    og_image: str | None
+    tags: tuple[str, ...]
+    draft: bool
+    extra: dict[str, object]
+    source_file: Path
+    source_dir: Path
 
 
 def load_site_metadata(context: BlogContext) -> dict:
@@ -158,6 +178,18 @@ def load_site_config(context: BlogContext) -> dict:
     if update_policy not in {"git", "manual"}:
         raise ValueError("site.update_policy must be 'git' or 'manual'")
     site["update_policy"] = update_policy
+    asset_extensions = site.get("asset_extensions")
+    if not isinstance(asset_extensions, list) or not asset_extensions:
+        raise ValueError("site.asset_extensions must be a non-empty array")
+    normalized_asset_extensions = []
+    for index, extension in enumerate(asset_extensions):
+        if not isinstance(extension, str) or not ASSET_EXTENSION_RE.fullmatch(extension):
+            raise ValueError(
+                f"site.asset_extensions[{index}] must be a dot followed by "
+                "ASCII letters or digits"
+            )
+        normalized_asset_extensions.append(extension.lower())
+    site["asset_extensions"] = normalized_asset_extensions
     return site
 
 
@@ -351,11 +383,11 @@ def tag_to_slug(tag: str) -> str:
     return "~" + normalized.encode("utf-8").hex()
 
 
-def build_tag_slug_map(posts: list[dict]) -> dict[str, str]:
+def build_tag_slug_map(posts: list[PostRecord]) -> dict[str, str]:
     tag_slugs: dict[str, str] = {}
     slug_owners: dict[str, str] = {}
     for post in posts:
-        for tag in post["tags"]:
+        for tag in post.tags:
             if tag in tag_slugs:
                 continue
             slug = tag_to_slug(tag)
@@ -370,18 +402,25 @@ def build_tag_slug_map(posts: list[dict]) -> dict[str, str]:
     return tag_slugs
 
 
-def validate_post_output_routes(posts: list[dict], static_dir: Path) -> None:
+def validate_post_output_routes(
+    posts: Sequence[PostRecord | dict],
+    static_dir: Path,
+) -> None:
     if not static_dir.is_dir():
         return
     static_routes = {portable_route_key(path.name): path.name for path in static_dir.iterdir()}
     for post in posts:
-        collision = static_routes.get(portable_route_key(post["slug"]))
+        slug = post.slug if isinstance(post, PostRecord) else post["slug"]
+        collision = static_routes.get(portable_route_key(slug))
         if collision is not None:
-            raise ValueError(f"post slug {post['slug']!r} conflicts with static/{collision}")
+            raise ValueError(f"post slug {slug!r} conflicts with static/{collision}")
 
 
-def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[dict]:
-    posts: list[dict] = []
+def collect_posts(
+    context: BlogContext,
+    posts_dir: Path | None = None,
+) -> list[PostRecord]:
+    posts: list[PostRecord] = []
     seen_slugs: dict[str, str] = {}
     for source_file in discover_post_files(context, posts_dir):
         meta = load_post_metadata(context, source_file)
@@ -398,7 +437,21 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
             raise ValueError(f"{relative}: {exc}") from exc
         title = meta.get("title")
         description = meta.get("description")
+        authors = meta.get("authors")
+        abstract = meta.get("abstract")
+        og_image = meta.get("og-image")
         draft = meta.get("draft", True)
+        if not isinstance(title, str) or not title:
+            raise ValueError(f"{relative}: title is required")
+        if not isinstance(description, str) or not description:
+            raise ValueError(f"{relative}: description is required")
+        if authors is not None and (
+            not isinstance(authors, (list, tuple))
+            or not all(isinstance(author, str) and author for author in authors)
+        ):
+            raise ValueError(f"{relative}: authors must be an array of non-empty strings or none")
+        if og_image is not None and not isinstance(og_image, str):
+            raise ValueError(f"{relative}: og-image must be a string or none")
         if not isinstance(draft, bool):
             raise ValueError(f"{relative}: draft must be true or false")
         route_key = portable_route_key(slug)
@@ -406,28 +459,27 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
         if previous_slug is not None:
             raise ValueError(f"post URL collision: {previous_slug!r} and {slug!r}")
         seen_slugs[route_key] = slug
-        if not title:
-            raise ValueError(f"{relative}: title is required")
         if create is None:
             raise ValueError(f"{relative}: create is required")
-        if not description:
-            raise ValueError(f"{relative}: description is required")
         posts.append(
-            {
-                "slug": slug,
-                "url_slug": post_slug_to_url_segment(slug),
-                "title": title,
-                "create": create,
-                "update": update,
-                "description": description,
-                "tags": tags,
-                "draft": draft,
-                "extra": extra,
-                "source_file": source_file,
-                "source_dir": source_file.parent,
-            }
+            PostRecord(
+                slug=slug,
+                url_slug=post_slug_to_url_segment(slug),
+                title=title,
+                authors=tuple(authors) if authors is not None else None,
+                create=create,
+                update=update,
+                description=description,
+                abstract=abstract,
+                og_image=og_image,
+                tags=tags,
+                draft=draft,
+                extra=extra,
+                source_file=source_file,
+                source_dir=source_file.parent,
+            )
         )
-    posts.sort(key=lambda post: post["create"], reverse=True)
+    posts.sort(key=lambda post: post.create, reverse=True)
     return posts
 
 
@@ -488,25 +540,69 @@ def collect_pages(context: BlogContext) -> list[dict]:
     return pages
 
 
-def validate_content_route_collisions(posts: list[dict], pages: list[dict]) -> None:
+def validate_content_route_collisions(posts: list[PostRecord], pages: list[dict]) -> None:
     owners: dict[str, tuple[str, str]] = {}
-    for kind, entries in (("post", posts), ("page", pages)):
-        for entry in entries:
-            slug = entry["slug"]
-            key = portable_route_key(slug)
-            previous = owners.get(key)
-            if previous is not None:
-                previous_kind, previous_slug = previous
-                raise ValueError(
-                    f"content URL collision: {previous_kind} {previous_slug!r} "
-                    f"and {kind} {slug!r}"
-                )
-            owners[key] = (kind, slug)
+    for post in posts:
+        slug = post.slug
+        key = portable_route_key(slug)
+        previous = owners.get(key)
+        if previous is not None:
+            previous_kind, previous_slug = previous
+            raise ValueError(
+                f"content URL collision: {previous_kind} {previous_slug!r} "
+                f"and post {slug!r}"
+            )
+        owners[key] = ("post", slug)
+    for page in pages:
+        slug = page["slug"]
+        key = portable_route_key(slug)
+        previous = owners.get(key)
+        if previous is not None:
+            previous_kind, previous_slug = previous
+            raise ValueError(
+                f"content URL collision: {previous_kind} {previous_slug!r} "
+                f"and page {slug!r}"
+            )
+        owners[key] = ("page", slug)
+
+
+def format_post_typst_record(
+    context: BlogContext,
+    post: PostRecord,
+    *,
+    outputs: list[dict[str, str]] | None = None,
+    indent: str = "",
+) -> list[str]:
+    source_url_path = quote(
+        post.source_file.relative_to(context.root_dir).as_posix(),
+        safe="/",
+    )
+    authors = "none" if post.authors is None else format_typst_json(post.authors)
+    abstract = "none" if post.abstract is None else format_typst_json(post.abstract)
+    og_image = "none" if post.og_image is None else typst_string(post.og_image)
+    update = format_typst_calver(post.update) if post.update else "none"
+    return [
+        f"{indent}{typst_string(post.slug)}: (",
+        f"{indent}  url-slug: {typst_string(post.url_slug)},",
+        f"{indent}  title: {typst_string(post.title)},",
+        f"{indent}  authors: {authors},",
+        f"{indent}  create: {format_typst_calver(post.create)},",
+        f"{indent}  update: {update},",
+        f"{indent}  description: {typst_string(post.description)},",
+        f"{indent}  abstract: {abstract},",
+        f"{indent}  og-image: {og_image},",
+        f"{indent}  tags: {format_typst_json(post.tags)},",
+        f"{indent}  draft: {'true' if post.draft else 'false'},",
+        f"{indent}  extra: {format_typst_json(post.extra)},",
+        f"{indent}  source_url_path: {typst_string(source_url_path)},",
+        f"{indent}  outputs: {_format_generated_outputs(outputs or [])},",
+        f"{indent}),",
+    ]
 
 
 def write_generated_site_data(
     context: BlogContext,
-    posts: list[dict],
+    posts: list[PostRecord],
     tag_slugs: dict[str, str],
     *,
     include_drafts: bool = False,
@@ -519,43 +615,19 @@ def write_generated_site_data(
     site_outputs = site_outputs or []
     pages = pages or []
     visible_posts = (
-        posts if include_drafts else [post for post in posts if not post["draft"]]
+        posts if include_drafts else [post for post in posts if not post.draft]
     )
     lines: list[str] = []
     if visible_posts:
         lines.append("#let posts = (")
         for post in visible_posts:
-            tags = post["tags"]
-            tag_value = (
-                "("
-                + ", ".join(typst_string(tag) for tag in tags)
-                + ("," if len(tags) == 1 else "")
-                + ")"
-                if tags
-                else "()"
-            )
-            source_url_path = quote(
-                post["source_file"].relative_to(context.root_dir).as_posix(),
-                safe="/",
-            )
-            update = post["update"]
             lines.extend(
-                [
-                    f"  {typst_string(post['slug'])}: (",
-                    f"    url-slug: {typst_string(post['url_slug'])},",
-                    f"    title: {typst_string(post['title'])},",
-                    f"    create: {format_typst_calver(post['create'])},",
-                    f"    update: {format_typst_calver(update) if update else 'none'},",
-                    f"    description: {typst_string(post['description'])},",
-                    f"    tags: {tag_value},",
-                    f"    draft: {'true' if post['draft'] else 'false'},",
-                    f"    extra: {format_typst_json(post['extra'])},",
-                    f"    source_url_path: {typst_string(source_url_path)},",
-                    "    outputs: "
-                    + _format_generated_outputs(post_outputs.get(post["slug"], []))
-                    + ",",
-                    "  ),",
-                ]
+                format_post_typst_record(
+                    context,
+                    post,
+                    outputs=post_outputs.get(post.slug, []),
+                    indent="  ",
+                )
             )
         lines.append(")")
     else:

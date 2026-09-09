@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 from .builder import build
-from .context import BlogContext, STATIC_EXTENSIONS
+from .context import BlogContext
+from .metadata import load_site_config
 
 
 PREVIEW_HOST = "127.0.0.1"
@@ -16,7 +17,7 @@ PREVIEW_PORT = 8000
 PREVIEW_PORT_ATTEMPTS = 10
 PREVIEW_VERSION_PATH = "/__typst_blog_preview_version"
 PREVIEW_SCRIPT_PATH = "/__typst_blog_preview.js"
-PREVIEW_WATCH_SUFFIXES = STATIC_EXTENSIONS | {".css", ".typ", ".py"}
+PREVIEW_SOURCE_SUFFIXES = frozenset({".css", ".typ", ".py"})
 PREVIEW_IGNORED_DIRS = {".git", "__pycache__", ".build", "public"}
 
 
@@ -89,7 +90,10 @@ def _preview_reload_script() -> str:
 '''
 
 
-def _preview_snapshot(root_dir: Path) -> dict[str, tuple[int, int]]:
+def _preview_snapshot(
+    root_dir: Path,
+    asset_extensions: frozenset[str],
+) -> dict[str, tuple[int, int]]:
     snapshot: dict[str, tuple[int, int]] = {}
     for path in root_dir.rglob("*"):
         try:
@@ -99,7 +103,7 @@ def _preview_snapshot(root_dir: Path) -> dict[str, tuple[int, int]]:
             if any(part in PREVIEW_IGNORED_DIRS for part in relative.parts):
                 continue
             if (
-                path.suffix.lower() not in PREVIEW_WATCH_SUFFIXES
+                path.suffix.lower() not in asset_extensions | PREVIEW_SOURCE_SUFFIXES
                 and relative.parts[:1] != ("static",)
             ):
                 continue
@@ -110,27 +114,36 @@ def _preview_snapshot(root_dir: Path) -> dict[str, tuple[int, int]]:
     return snapshot
 
 
-def _watch_preview(root_dir: Path, state: _PreviewState) -> None:
-    snapshot = _preview_snapshot(root_dir)
+def _watch_preview(
+    root_dir: Path,
+    state: _PreviewState,
+    asset_extensions: frozenset[str],
+) -> None:
+    snapshot = _preview_snapshot(root_dir, asset_extensions)
     while True:
         time.sleep(0.5)
-        next_snapshot = _preview_snapshot(root_dir)
+        next_snapshot = _preview_snapshot(root_dir, asset_extensions)
         if next_snapshot == snapshot:
             continue
         time.sleep(0.2)
-        snapshot = _preview_snapshot(root_dir)
         print("Change detected. Rebuilding preview...")
         try:
             build(root_dir=root_dir, base_path="", include_drafts=True, mode="preview")
         except Exception as exc:
             print(f"Preview rebuild failed: {exc}", file=sys.stderr)
         else:
+            context = BlogContext.create(root_dir)
+            asset_extensions = frozenset(
+                load_site_config(context)["asset_extensions"]
+            )
             state.mark_rebuilt()
             print("Preview updated.")
+        snapshot = _preview_snapshot(root_dir, asset_extensions)
 
 
 def preview(root_dir: Path | str | None = None) -> None:
     context = BlogContext.create(root_dir, base_path="")
+    asset_extensions = frozenset(load_site_config(context)["asset_extensions"])
     build(root_dir=context.root_dir, base_path="", include_drafts=True, mode="preview")
     state = _PreviewState()
     _PreviewRequestHandler.preview_state = state
@@ -149,7 +162,11 @@ def preview(root_dir: Path | str | None = None) -> None:
             f"{PREVIEW_PORT + PREVIEW_PORT_ATTEMPTS - 1}: {last_error}"
         ) from last_error
 
-    watcher = threading.Thread(target=_watch_preview, args=(context.root_dir, state), daemon=True)
+    watcher = threading.Thread(
+        target=_watch_preview,
+        args=(context.root_dir, state, asset_extensions),
+        daemon=True,
+    )
     watcher.start()
     selected_port = server.server_address[1]
     if selected_port != PREVIEW_PORT:

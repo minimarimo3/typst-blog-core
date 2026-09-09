@@ -11,6 +11,7 @@ from types import ModuleType
 from typing import Callable, Iterable, Literal, Mapping, Sequence
 
 from .context import BlogContext, run_typst
+from .metadata import PostRecord
 
 
 BuildMode = Literal["build", "preview"]
@@ -28,44 +29,13 @@ PORTABLE_RESERVED_NAMES = {
 
 
 @dataclass(frozen=True)
-class PostInfo:
-    slug: str
-    url_slug: str
-    title: str
-    create: object
-    update: object
-    description: str
-    tags: tuple[str, ...]
-    draft: bool
-    extra: Mapping[str, object]
-    source_file: Path
-    source_dir: Path
-
-    @classmethod
-    def from_post(cls, post: Mapping[str, object]) -> "PostInfo":
-        return cls(
-            slug=str(post["slug"]),
-            url_slug=str(post["url_slug"]),
-            title=str(post["title"]),
-            create=post["create"],
-            update=post["update"],
-            description=str(post["description"]),
-            tags=tuple(post["tags"]),  # type: ignore[arg-type]
-            draft=bool(post["draft"]),
-            extra=dict(post["extra"]),  # type: ignore[arg-type]
-            source_file=Path(post["source_file"]),
-            source_dir=Path(post["source_dir"]),
-        )
-
-
-@dataclass(frozen=True)
 class BuildTask:
     root_dir: Path
     build_dir: Path
     output_dir: Path
     mode: BuildMode
     site: Mapping[str, object]
-    posts: tuple[PostInfo, ...]
+    posts: tuple[PostRecord, ...]
     _context: BlogContext
 
     def relative(self, path: Path | str) -> str:
@@ -104,7 +74,7 @@ class OutputTask(BuildTask):
     label: str
     media_type: str
     destination: Path
-    post: PostInfo | None
+    post: PostRecord | None
 
 
 @dataclass(frozen=True)
@@ -144,7 +114,7 @@ class PlannedOutput:
     output_path: str
     destination: Path
     build: OutputCallback
-    post: PostInfo | None
+    post: PostRecord | None
 
     def as_theme_data(self) -> dict[str, str]:
         return {
@@ -270,13 +240,13 @@ class Pipeline:
     def plan_outputs(
         self,
         context: BlogContext,
-        posts: Sequence[Mapping[str, object]],
+        posts: Sequence[PostRecord],
         mode: BuildMode,
         reserved_paths: Iterable[str],
     ) -> tuple[dict[str, list[PlannedOutput]], list[PlannedOutput]]:
-        post_infos = tuple(PostInfo.from_post(post) for post in posts)
+        post_records = tuple(posts)
         post_outputs: dict[str, list[PlannedOutput]] = {
-            post.slug: [] for post in post_infos
+            post.slug: [] for post in post_records
         }
         site_outputs: list[PlannedOutput] = []
         claimed = {portable_output_key(path) for path in reserved_paths}
@@ -284,7 +254,7 @@ class Pipeline:
         for spec in self._outputs:
             if mode not in spec.modes:
                 continue
-            owners: Sequence[PostInfo | None] = post_infos if spec.per_post else (None,)
+            owners: Sequence[PostRecord | None] = post_records if spec.per_post else (None,)
             for post in owners:
                 if post is not None:
                     destination = context.output_dir / post.slug / spec.filename

@@ -16,27 +16,19 @@ from typst_blog_core.builder import (  # noqa: E402
     _run_post_build,
 )
 from typst_blog_core.context import BlogContext  # noqa: E402
-from typst_blog_core.metadata import make_calver  # noqa: E402
 from typst_blog_core.pipeline import Pipeline, load_pipeline  # noqa: E402
+from post_factory import make_post_record  # noqa: E402
 
 
-def make_post(root: Path) -> dict:
+def make_post(root: Path):
     source = root / "hello" / "index.typ"
     source.parent.mkdir(parents=True)
     source.write_text("Hello", encoding="utf-8")
-    return {
-        "slug": "hello",
-        "url_slug": "hello",
-        "title": "Hello",
-        "create": make_calver(2026, 1, 2),
-        "update": None,
-        "description": "Description",
-        "tags": (),
-        "draft": False,
-        "extra": {"course": "typst-basics"},
-        "source_file": source,
-        "source_dir": source.parent,
-    }
+    return make_post_record(
+        root,
+        source_file=source,
+        extra={"course": "typst-basics"},
+    )
 
 
 class PipelineConfigurationTests(unittest.TestCase):
@@ -150,6 +142,32 @@ class PipelineExecutionTests(unittest.TestCase):
                     "path": "/hello/article.pdf",
                 },
             )
+
+    def test_pipeline_receives_complete_post_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            post = make_post_record(
+                context.root_dir,
+                authors=("Ada",),
+                abstract="Summary",
+                og_image="/images/card.png",
+            )
+            pipeline = Pipeline()
+            pipeline.post_output(
+                id="text",
+                filename="record.txt",
+                label="Record",
+                media_type="text/plain",
+                build=lambda task: None,
+            )
+
+            post_outputs, _ = pipeline.plan_outputs(context, [post], "build", set())
+            pipeline_post = post_outputs[post.slug][0].post
+
+            self.assertIs(pipeline_post, post)
+            self.assertEqual(pipeline_post.authors, ("Ada",))
+            self.assertEqual(pipeline_post.abstract, "Summary")
+            self.assertEqual(pipeline_post.og_image, "/images/card.png")
 
     def test_preview_only_runs_hooks_that_opt_in(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
