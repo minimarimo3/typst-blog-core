@@ -35,6 +35,7 @@ GENERATED_ROUTE_NAMES = {
     "color-schemes",
     "feed.xml",
     "index.html",
+    "page",
     "pagefind",
     "scripts",
     "sitemap.xml",
@@ -191,6 +192,19 @@ def load_site_config(context: BlogContext) -> dict:
     if update_policy not in {"git", "manual"}:
         raise ValueError("site.update_policy must be 'git' or 'manual'")
     site["update_policy"] = update_policy
+    pagination = site.get("pagination")
+    if not isinstance(pagination, dict):
+        raise ValueError("site.pagination must be a dictionary")
+    for name in ("home", "tag"):
+        setting = pagination.get(name)
+        if not isinstance(setting, dict):
+            raise ValueError(f"site.pagination.{name} must be a dictionary")
+        enabled = setting.get("enabled")
+        per_page = setting.get("per_page")
+        if not isinstance(enabled, bool):
+            raise ValueError(f"site.pagination.{name}.enabled must be true or false")
+        if isinstance(per_page, bool) or not isinstance(per_page, int) or per_page < 1:
+            raise ValueError(f"site.pagination.{name}.per_page must be an integer greater than zero")
     asset_extensions = site.get("asset_extensions")
     if not isinstance(asset_extensions, list) or not asset_extensions:
         raise ValueError("site.asset_extensions must be a non-empty array")

@@ -60,9 +60,16 @@ class ContentAssetTests(unittest.TestCase):
                 [],
                 {},
                 frozenset({".mp3"}),
+                {
+                    "pagination": {
+                        "home": {"enabled": True, "per_page": 1},
+                        "tag": {"enabled": True, "per_page": 1},
+                    }
+                },
             )
 
             self.assertIn("post/audio.mp3", paths)
+            self.assertNotIn("page/2/index.html", paths)
             self.assertNotIn("post/ignored.bin", paths)
 
 

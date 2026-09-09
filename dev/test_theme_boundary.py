@@ -16,6 +16,8 @@ from typst_blog_core.builder import (  # noqa: E402
     _tag_page_content,
     _tags_index_content,
     copy_static_assets,
+    _pagination_page_count,
+    _pagination_slice,
 )
 from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.metadata import CalVer, load_site_config  # noqa: E402
@@ -105,6 +107,10 @@ class ThemeBoundaryTests(unittest.TestCase):
                     "base_url": "https://example.com/",
                     "language": {"lang": "en"},
                     "theme": {"layout": "custom"},
+                    "pagination": {
+                        "home": {"enabled": False, "per_page": 10},
+                        "tag": {"enabled": True, "per_page": 5},
+                    },
                     "asset_extensions": [".PNG", ".woff2"],
                 },
             ):
@@ -124,11 +130,30 @@ class ThemeBoundaryTests(unittest.TestCase):
                     "description": "Test site",
                     "base_url": "https://example.com",
                     "language": {"lang": "en"},
+                    "pagination": {
+                        "home": {"enabled": False, "per_page": 10},
+                        "tag": {"enabled": False, "per_page": 10},
+                    },
                     "asset_extensions": ["mp4"],
                 },
             ):
                 with self.assertRaisesRegex(ValueError, "site.asset_extensions\\[0\\]"):
                     load_site_config(context)
+
+    def test_pagination_can_be_disabled_or_sized(self) -> None:
+        items = list(range(23))
+        disabled = {"enabled": False, "per_page": 10}
+        enabled = {"enabled": True, "per_page": 10}
+
+        self.assertEqual(_pagination_page_count(len(items), disabled), 1)
+        self.assertEqual(_pagination_slice(items, disabled, 1), items)
+        self.assertEqual(_pagination_page_count(len(items), enabled), 3)
+        self.assertEqual(_pagination_slice(items, enabled, 2), list(range(10, 20)))
+
+        page_source = _home_page_content(2, 3, 10)
+        self.assertIn("page-number: 2", page_source)
+        self.assertIn("total-pages: 3", page_source)
+        self.assertIn("per-page: 10", page_source)
 
 if __name__ == "__main__":
     unittest.main()

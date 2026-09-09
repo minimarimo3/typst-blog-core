@@ -5,6 +5,7 @@
 /// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュなし
 /// - language (str, dictionary): `"ja"`、または Typst の `text` と同じ `lang` / `region` / `script` を持つ辞書
 /// - theme (dictionary): template側themeが定義する設定。coreは内容を解釈しない
+/// - pagination (dictionary): home / tag の一覧分割設定。各項目は enabled (bool) と per_page (int) を持つ
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
 /// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
 /// - asset_extensions (array): 記事・固定ページのディレクトリから出力へコピーするファイル拡張子
@@ -16,7 +17,7 @@
 ///     // heading / math / 任意名のフォントも追加可
 ///   )
 ///   ```
-/// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `links`（`id` / `label` / `url` を持つ配列）を含む辞書
+/// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `links`（`id` / `label` / `url` と省略可能な `icon` を持つ配列）を含む辞書
 /// - analytics (dictionary): アナリティクス設定。`cloudflare_token`（str | none）を含む辞書
 /// - github_repo (str, none): GitHub リポジトリの URL（例: `"https://github.com/user/repo"`）。設定すると記事ページに編集履歴リンクが表示される
 /// -> dictionary
@@ -26,6 +27,10 @@
   base_url: none,
   language: none,
   theme: (:),
+  pagination: (
+    home: (enabled: false, per_page: 10),
+    tag: (enabled: false, per_page: 10),
+  ),
   posts_dir: ".",
   update_policy: "git",
   asset_extensions: none,
@@ -109,6 +114,27 @@
   }
 
   assert(type(theme) == dictionary, message: "site.theme: theme固有設定の辞書が必要です")
+  assert(type(pagination) == dictionary, message: "site.pagination: 辞書が必要です")
+  assert(
+    pagination.keys().all(key => key in ("home", "tag")),
+    message: "site.pagination: home, tag 以外のキーは使用できません",
+  )
+  let pagination = (
+    home: pagination.at("home", default: (enabled: false, per_page: 10)),
+    tag: pagination.at("tag", default: (enabled: false, per_page: 10)),
+  )
+  for (name, setting) in pagination {
+    assert(type(setting) == dictionary, message: "site.pagination." + name + ": 辞書が必要です")
+    assert(
+      setting.keys().all(key => key in ("enabled", "per_page")),
+      message: "site.pagination." + name + ": enabled, per_page 以外のキーは使用できません",
+    )
+    assert(type(setting.at("enabled", default: none)) == bool, message: "site.pagination." + name + ".enabled: true/false が必要です")
+    assert(
+      type(setting.at("per_page", default: none)) == int and setting.per_page > 0,
+      message: "site.pagination." + name + ".per_page: 1以上の整数が必要です",
+    )
+  }
 
   // fonts（main・code は必須、それぞれ pdf フィールドが必要）
   assert(type(fonts) == dictionary, message: "site.fonts: 辞書が必要です")
@@ -150,8 +176,8 @@
   for (index, link) in links.enumerate() {
     assert(type(link) == dictionary, message: "site.author.links.at(" + str(index) + "): 辞書が必要です")
     assert(
-      link.keys().all(key => key in ("id", "label", "url")),
-      message: "site.author.links.at(" + str(index) + "): id, label, url 以外のキーは使用できません",
+      link.keys().all(key => key in ("id", "label", "url", "icon")),
+      message: "site.author.links.at(" + str(index) + "): id, label, url, icon 以外のキーは使用できません",
     )
     let id = link.at("id", default: none)
     _req(id, "author.links.at(" + str(index) + ").id")
@@ -163,6 +189,23 @@
     let url = link.at("url", default: none)
     assert(type(url) == str and url != "", message: "site.author.links.at(" + str(index) + ").url: 空でないURLが必要です")
     _url(url, "author.links.at(" + str(index) + ").url")
+    let icon = link.at("icon", default: none)
+    assert(
+      icon == none or (type(icon) == str and icon.trim() != ""),
+      message: "site.author.links.at(" + str(index) + ").icon: 空でない文字列か none が必要です",
+    )
+    if icon != none {
+      let segments = icon.split("/")
+      assert(
+        not icon.starts-with("/")
+          and not icon.contains("\\")
+          and not ("." in segments)
+          and not (".." in segments)
+          and not icon.contains("?")
+          and not icon.contains("#"),
+        message: "site.author.links.at(" + str(index) + ").icon: static/ からの安全な相対パスが必要です",
+      )
+    }
   }
 
   // analytics（省略可・設定する場合は文字列）
@@ -177,7 +220,7 @@
 
   (
     title: title, description: description, base_url: base_url, language: language,
-    theme: theme, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
+    theme: theme, pagination: pagination, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
     github_repo: github_repo,
   )
 }

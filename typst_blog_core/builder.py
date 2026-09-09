@@ -204,6 +204,7 @@ def reserved_output_paths(
     pages: list[dict],
     tag_slugs: dict[str, str],
     asset_extensions: frozenset[str],
+    site: dict,
 ) -> set[str]:
     paths = {"index.html", "404.html", "feed.xml", "sitemap.xml", "tags/index.html"}
     for post in posts:
@@ -242,7 +243,32 @@ def reserved_output_paths(
         for filename in ROOT_STATIC_FILES
         if (context.root_dir / filename).is_file()
     )
+    home_pages = _pagination_page_count(len(posts), site["pagination"]["home"])
+    paths.update(f"page/{page}/index.html" for page in range(2, home_pages + 1))
+    tag_counts: dict[str, int] = {}
+    for post in posts:
+        for tag in post.tags:
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    for tag, count in tag_counts.items():
+        total = _pagination_page_count(count, site["pagination"]["tag"])
+        paths.update(
+            f"tags/{tag_slugs[tag]}/page/{page}/index.html"
+            for page in range(2, total + 1)
+        )
     return paths
+
+
+def _pagination_page_count(item_count: int, setting: dict) -> int:
+    if not setting["enabled"] or item_count == 0:
+        return 1
+    return (item_count + setting["per_page"] - 1) // setting["per_page"]
+
+
+def _pagination_slice(items: list, setting: dict, page: int) -> list:
+    if not setting["enabled"]:
+        return items
+    start = (page - 1) * setting["per_page"]
+    return items[start : start + setting["per_page"]]
 
 
 def _compile_theme_entry(
@@ -281,12 +307,16 @@ def _tag_page_content(
     tag: str,
     tag_slug: str,
     tag_posts: list[PostRecord],
+    page_number: int = 1,
+    total_pages: int = 1,
 ) -> str:
     lines = [
         '#import "/theme/theme.typ": render-tag, core',
         "#render-tag(core.tag-page-data(",
         f"  tag: {typst_string(tag)},",
         f"  tag-slug: {typst_string(tag_slug)},",
+        f"  page-number: {page_number},",
+        f"  total-pages: {total_pages},",
         "  posts: (",
     ]
     for post in tag_posts:
@@ -311,6 +341,7 @@ def build_tag_pages(
     context: BlogContext,
     posts: list[PostRecord],
     tag_slugs: dict[str, str],
+    site: dict,
     *,
     include_drafts: bool = False,
 ) -> None:
@@ -328,15 +359,27 @@ def build_tag_pages(
     tags_dir.mkdir(parents=True, exist_ok=True)
     for index, (tag, posts_for_tag) in enumerate(tag_posts.items()):
         slug = tag_slugs[tag]
-        tag_output_dir = tags_dir / slug
-        tag_output_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Building tag page: #{tag}")
-        _compile_theme_entry(
-            context,
-            f"tag-{index}",
-            _tag_page_content(context, tag, slug, posts_for_tag),
-            tag_output_dir / "index.html",
-        )
+        setting = site["pagination"]["tag"]
+        total_pages = _pagination_page_count(len(posts_for_tag), setting)
+        for page_number in range(1, total_pages + 1):
+            tag_output_dir = tags_dir / slug
+            if page_number > 1:
+                tag_output_dir = tag_output_dir / "page" / str(page_number)
+            tag_output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Building tag page: #{tag} ({page_number}/{total_pages})")
+            _compile_theme_entry(
+                context,
+                f"tag-{index}-{page_number}",
+                _tag_page_content(
+                    context,
+                    tag,
+                    slug,
+                    _pagination_slice(posts_for_tag, setting, page_number),
+                    page_number,
+                    total_pages,
+                ),
+                tag_output_dir / "index.html",
+            )
 
     tags_with_counts = sorted(
         [(tag, tag_slugs[tag], len(posts_for_tag)) for tag, posts_for_tag in tag_posts.items()],
@@ -352,10 +395,17 @@ def build_tag_pages(
     print(f"Built {len(tag_posts)} tag page(s).")
 
 
-def _home_page_content() -> str:
-    return '''#import "/theme/theme.typ": render-home, core
+def _home_page_content(page_number: int = 1, total_pages: int = 1, per_page: int | None = None) -> str:
+    per_page_value = "none" if per_page is None else str(per_page)
+    return f'''#import "/theme/theme.typ": render-home, core
 #let build-data = core.load-build-data()
-#render-home(core.home-page-data(posts: build-data.posts, outputs: build-data.site-outputs))
+#render-home(core.home-page-data(
+  posts: build-data.posts,
+  outputs: build-data.site-outputs,
+  page-number: {page_number},
+  total-pages: {total_pages},
+  per-page: {per_page_value},
+))
 '''
 
 
@@ -365,13 +415,21 @@ def _not_found_page_content() -> str:
 '''
 
 
-def build_static_pages(context: BlogContext) -> None:
-    _compile_theme_entry(
-        context,
-        "home",
-        _home_page_content(),
-        context.output_dir / "index.html",
-    )
+def build_static_pages(context: BlogContext, site: dict, post_count: int) -> None:
+    setting = site["pagination"]["home"]
+    total_pages = _pagination_page_count(post_count, setting)
+    per_page = setting["per_page"] if setting["enabled"] else None
+    for page_number in range(1, total_pages + 1):
+        output_dir = context.output_dir
+        if page_number > 1:
+            output_dir = output_dir / "page" / str(page_number)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _compile_theme_entry(
+            context,
+            f"home-{page_number}",
+            _home_page_content(page_number, total_pages, per_page),
+            output_dir / "index.html",
+        )
     _compile_theme_entry(
         context,
         "not-found",
@@ -546,6 +604,7 @@ def prepare_build(
             active_pages,
             tag_slugs,
             asset_extensions,
+            site,
         ),
     )
 
@@ -618,9 +677,9 @@ def build_prepared(prepared: PreparedBuild) -> PreparedBuild:
         else:
             build_page(context, page, asset_extensions)
     print("Building static pages...")
-    build_static_pages(context)
+    build_static_pages(context, site, len(active_posts))
     print("Building tag pages...")
-    build_tag_pages(context, posts, tag_slugs, include_drafts=include_drafts)
+    build_tag_pages(context, posts, tag_slugs, site, include_drafts=include_drafts)
     print("Generating RSS and sitemap...")
     generate_rss(context, site, posts)
     generate_sitemap(context, site, posts, pages)
