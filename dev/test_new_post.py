@@ -11,7 +11,11 @@ from unittest.mock import patch
 CORE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CORE_DIR))
 
-from typst_blog_core.new_post import create_post, parse_post_date  # noqa: E402
+from typst_blog_core.new_post import (  # noqa: E402
+    PostTemplateContext,
+    create_post,
+    parse_post_date,
+)
 
 
 class NewPostTests(unittest.TestCase):
@@ -60,6 +64,65 @@ class NewPostTests(unittest.TestCase):
                 publish=True,
             )
             self.assertIn("draft: false", index_file.read_text(encoding="utf-8"))
+
+    def test_default_template_writes_extra_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_post(
+                root_dir=directory,
+                slug="lesson-one",
+                title="Lesson one",
+                description="Description",
+                extra={"course": "typst-basics", "lesson": 1},
+            )
+            source = index_file.read_text(encoding="utf-8")
+            self.assertIn(
+                'extra: json(bytes("{\\\"course\\\":\\\"typst-basics\\\",\\\"lesson\\\":1}"))',
+                source,
+            )
+
+    def test_custom_template_receives_validated_context(self) -> None:
+        received: list[PostTemplateContext] = []
+
+        def template(post: PostTemplateContext) -> str:
+            received.append(post)
+            return f"custom template for {post.extra['course']}\n"
+
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_post(
+                root_dir=directory,
+                slug="custom",
+                title=" Custom title ",
+                description=" Custom description ",
+                tags=["Typst"],
+                create=dt.date(2026, 9, 9),
+                extra={"course": "typst-basics"},
+                template=template,
+            )
+
+            self.assertEqual(
+                index_file.read_text(encoding="utf-8"),
+                "custom template for typst-basics\n",
+            )
+            self.assertEqual(received[0].title, "Custom title")
+            self.assertEqual(received[0].description, "Custom description")
+            self.assertEqual(received[0].tags, ("Typst",))
+            self.assertEqual(received[0].create, dt.date(2026, 9, 9))
+            self.assertTrue(received[0].draft)
+
+    def test_template_failure_does_not_leave_destination(self) -> None:
+        def invalid_template(_post: PostTemplateContext) -> int:
+            return 42
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(TypeError, "must return a string"):
+                create_post(
+                    root_dir=directory,
+                    slug="invalid-template",
+                    title="Invalid",
+                    description="Description",
+                    template=invalid_template,  # type: ignore[arg-type]
+                )
+            self.assertFalse((Path(directory) / "invalid-template").exists())
 
     def test_creates_post_with_title_like_slug(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

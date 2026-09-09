@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Sequence
 
 from .builder import build
-from .new_post import create_post, parse_post_date
+from .new_post import PostTemplate, create_post, parse_post_date
 from .new_page import create_page
 from .preview import preview
 
 
-def _parser() -> argparse.ArgumentParser:
+ConfigureNewPostParser = Callable[[argparse.ArgumentParser], None]
+
+
+def _parser(
+    configure_new_post: ConfigureNewPostParser | None = None,
+) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create, build, and preview a Typst blog.")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -41,6 +47,15 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="create as published instead of the safer draft default",
     )
+    core_post_arguments = {action.dest for action in post_parser._actions}
+    if configure_new_post is not None:
+        configure_new_post(post_parser)
+    custom_post_arguments = tuple(
+        action.dest
+        for action in post_parser._actions
+        if action.dest not in core_post_arguments
+    )
+    post_parser.set_defaults(_custom_post_arguments=custom_post_arguments)
 
     page_parser = new_subparsers.add_parser("page", help="create a new general page")
     page_parser.add_argument("slug", help="URL slug and directory name")
@@ -63,8 +78,10 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     root_dir: Path | str | None = None,
+    configure_new_post: ConfigureNewPostParser | None = None,
+    new_post_template: PostTemplate | None = None,
 ) -> int:
-    args = _parser().parse_args(argv)
+    args = _parser(configure_new_post).parse_args(argv)
     command = args.command or "build"
     try:
         if command == "build":
@@ -81,6 +98,12 @@ def main(
                     tags=args.tag,
                     create=args.date,
                     publish=args.publish,
+                    extra={
+                        name: getattr(args, name)
+                        for name in args._custom_post_arguments
+                        if getattr(args, name, None) is not None
+                    },
+                    template=new_post_template,
                 )
             else:
                 index_file = create_page(

@@ -62,6 +62,73 @@ python3 command.py new post my-first-post \
   --tag Typst
 ```
 
+### Customize `new post` From The Blog
+
+The blog-owned `command.py` can add arguments to `new post` without modifying
+the core submodule. Pass a parser callback to `core_api.main()`:
+
+```python
+from __future__ import annotations
+
+import argparse
+
+
+core_api = _load_core_api()
+
+
+def configure_new_post(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--course", required=True)
+    parser.add_argument("--lesson", required=True, type=int)
+
+
+def main() -> int:
+    return core_api.main(
+        root_dir=ROOT_DIR,
+        configure_new_post=configure_new_post,
+    )
+```
+
+The added values are written to the standard template's `extra` dictionary,
+so this command produces `extra: (course: ..., lesson: ...)` metadata after
+Typst decodes it:
+
+```sh
+python3 command.py new post lesson-one \
+  --title "Lesson one" \
+  --description "The first lesson." \
+  --course typst-basics \
+  --lesson 1
+```
+
+Argument values must be JSON-compatible. Options with a value of `None` are
+omitted; this lets an optional argument stay absent from `extra` unless it is
+used.
+
+For a completely custom source template, also pass a function as
+`new_post_template`. It receives a validated `PostTemplateContext`. Calling
+`default_post_template()` is the easiest way to keep the core metadata header
+and replace only the starter body:
+
+```python
+def course_post_template(post: core_api.PostTemplateContext) -> str:
+    source = core_api.default_post_template(post)
+    return source.replace(
+        "// Write the post body below.",
+        "= Goals\n\n= Lesson\n\n= Exercises",
+    )
+
+
+def main() -> int:
+    return core_api.main(
+        root_dir=ROOT_DIR,
+        configure_new_post=configure_new_post,
+        new_post_template=course_post_template,
+    )
+```
+
+If neither customization argument is passed, core continues to use its own
+standard arguments and standard post template.
+
 Create non-post content such as About, FAQ, or policy pages with `new page`.
 General pages live below `pages/`, stay out of post lists, tags, adjacent-post
 navigation, and RSS, and use their own theme renderer.
