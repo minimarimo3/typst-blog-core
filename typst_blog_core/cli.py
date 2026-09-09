@@ -28,7 +28,7 @@ def _parser(
     new_subparsers = new_parser.add_subparsers(dest="content_type", required=True)
 
     post_parser = new_subparsers.add_parser("post", help="create a new post")
-    post_parser.add_argument("slug", help="URL slug and directory name")
+    post_parser.add_argument("slug", help="post directory name (also the default URL path)")
     post_parser.add_argument("--title", required=True, help="post title")
     post_parser.add_argument("--description", required=True, help="short post description")
     post_parser.add_argument(
@@ -58,7 +58,7 @@ def _parser(
     post_parser.set_defaults(_custom_post_arguments=custom_post_arguments)
 
     page_parser = new_subparsers.add_parser("page", help="create a new general page")
-    page_parser.add_argument("slug", help="URL slug and directory name")
+    page_parser.add_argument("slug", help="page directory name (also the default URL path)")
     page_parser.add_argument("--title", required=True, help="page title")
     page_parser.add_argument("--description", required=True, help="short page description")
     page_parser.add_argument(

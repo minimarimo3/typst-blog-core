@@ -13,6 +13,7 @@ CORE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CORE_DIR))
 
 from typst_blog_core.context import BlogContext  # noqa: E402
+from typst_blog_core.builder import generate_alias_redirects  # noqa: E402
 from typst_blog_core.metadata import (  # noqa: E402
     build_tag_slug_map,
     collect_posts,
@@ -23,6 +24,7 @@ from typst_blog_core.metadata import (  # noqa: E402
     tag_to_slug,
     validate_post_output_routes,
     validate_post_extra,
+    validate_permalink,
     validate_post_slug,
     validate_post_tags,
     write_generated_site_data,
@@ -96,11 +98,70 @@ class PostSlugTests(unittest.TestCase):
             static_dir = Path(directory)
             (static_dir / "my-first-post").mkdir()
             with self.assertRaisesRegex(ValueError, "conflicts with static"):
-                validate_post_output_routes([{"slug": "my-first-post"}], static_dir)
+                validate_post_output_routes(
+                    [{"route_path": "my-first-post", "aliases": ()}], static_dir
+                )
 
     def test_rejects_non_nfc_slug(self) -> None:
         with self.assertRaisesRegex(ValueError, "NFC"):
             validate_post_slug("カ\N{COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK}")
+
+
+class PermalinkTests(unittest.TestCase):
+    def test_accepts_nested_directory_urls(self) -> None:
+        self.assertEqual(
+            validate_permalink("/記事/Typst 入門/"),
+            "記事/Typst 入門",
+        )
+        self.assertEqual(validate_permalink("/blog/tags/"), "blog/tags")
+
+    def test_requires_absolute_directory_url(self) -> None:
+        for value in ("blog/post/", "/blog/post", "/", "/blog//post/"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_permalink(value)
+
+    def test_collects_default_nested_route_and_permalink_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            posts_dir = context.root_dir / "posts"
+            source = posts_dir / "fugafuga" / "piyo" / "index.typ"
+            source.parent.mkdir(parents=True)
+            source.write_text("post", encoding="utf-8")
+            metadata = {
+                "title": "Post",
+                "create": "2026.09.09",
+                "description": "Description",
+                "draft": False,
+            }
+            with patch("typst_blog_core.metadata.load_post_metadata", return_value=metadata):
+                post = collect_posts(context, posts_dir)[0]
+            self.assertEqual(post.route_path, "fugafuga/piyo")
+            self.assertEqual(post.url_slug, "fugafuga/piyo")
+
+            metadata["permalink"] = "/piyopiyo/"
+            metadata["aliases"] = ["/fugafuga/piyo/", "/old/piyo/"]
+            with patch("typst_blog_core.metadata.load_post_metadata", return_value=metadata):
+                post = collect_posts(context, posts_dir)[0]
+            self.assertEqual(post.route_path, "piyopiyo")
+            self.assertEqual(post.aliases, ("fugafuga/piyo", "old/piyo"))
+
+    def test_alias_redirect_preserves_query_and_fragment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            post = make_post_record(
+                context.root_dir,
+                route_path="new/path",
+                url_slug="new/path",
+                aliases=("old/path",),
+            )
+            generate_alias_redirects(
+                context,
+                {"base_url": "https://example.com/blog", "language": "ja"},
+                [post],
+            )
+            redirect = (context.output_dir / "old/path/index.html").read_text(encoding="utf-8")
+            self.assertIn('href="/blog/new/path/"', redirect)
+            self.assertIn("location.search + location.hash", redirect)
 
 
 class TagSlugTests(unittest.TestCase):

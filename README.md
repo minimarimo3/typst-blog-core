@@ -267,7 +267,6 @@ User-authored posts should continue to import the root compatibility module:
 #import "/template.typ": post, calver
 
 #show: post.with(
-  slug: "my-first-post",
   title: "My First Post",
   create: calver(2026, 1, 1),
   description: "A short description of the post.",
@@ -281,6 +280,12 @@ The `post` show rule registers metadata and asks the renderer bound by the root
 `template.typ` to render the remaining document. This root module is the
 composition boundary between core and theme and also re-exports stable
 authoring helpers.
+
+Posts are published at the directory path relative to `site.posts_dir`; pages
+use their path relative to `pages/`. Both `post` and `site-page` accept an
+optional `permalink: "/canonical/path/"` and an `aliases` array of old paths.
+Core emits a redirect page for every alias and rejects canonical or alias URL
+collisions before writing output.
 
 ## Build Pipeline Contract
 

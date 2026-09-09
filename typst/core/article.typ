@@ -5,7 +5,8 @@
 
 /// 記事のメタデータを構築する。
 #let post-meta(
-  slug: none,
+  permalink: none,
+  aliases: (),
   title: "記事タイトル",
   authors: none,
   create: none,
@@ -19,7 +20,8 @@
 ) = {
   assert(type(extra) == dictionary, message: "extra must be a dictionary")
   (
-    slug: slug,
+    permalink: permalink,
+    aliases: aliases,
     title: title,
     authors: authors,
     create: create,
@@ -72,7 +74,8 @@
 }
 
 #let _article-data(
-  slug,
+  permalink,
+  aliases,
   title,
   authors,
   create,
@@ -85,7 +88,6 @@
   extra,
   body,
 ) = {
-  assert(slug != none, message: "slug is required")
   assert(create != none, message: "create is required")
   assert(description != none, message: "description is required")
   assert(type(extra) == dictionary, message: "extra must be a dictionary")
@@ -93,7 +95,8 @@
   let build-data = load-build-data()
   let post-data = build-data.posts
   let tag-slugs = build-data.tag-slugs
-  let generated = post-data.at(slug)
+  let content-id = sys.inputs.at("content-id")
+  let generated = post-data.at(content-id)
   let generated-update = generated.at("update", default: none)
   let generated-extra = generated.at("extra", default: extra)
   let url-slug = generated.at("url-slug")
@@ -106,7 +109,7 @@
     authors: document-authors,
     create: create,
     update: effective-update,
-    slug: slug,
+    slug: content-id,
     url-slug: url-slug,
     image: og-image,
   )
@@ -130,7 +133,7 @@
       authors: document-authors,
     ),
     post: (
-      slug: slug,
+      slug: content-id,
       url-slug: url-slug,
       title: title,
       authors: document-authors,
@@ -149,7 +152,7 @@
       source-url: source-url,
       outputs: outputs,
     ),
-    navigation: _post-navigation(slug, post-data),
+    navigation: _post-navigation(content-id, post-data),
     seo: seo,
     body: body,
   )
@@ -158,7 +161,8 @@
 /// 記事メタデータを解決し、完成 HTML の構築を template 側の renderer に委譲する。
 #let article(
   renderer: none,
-  slug: none,
+  permalink: none,
+  aliases: (),
   title: "記事タイトル",
   authors: none,
   create: none,
@@ -188,7 +192,8 @@
 
   assert(renderer != none, message: "article renderer is required; bind it from /template.typ")
   renderer(_article-data(
-    slug,
+    permalink,
+    aliases,
     title,
     document-authors,
     create,
@@ -206,7 +211,8 @@
 /// 記事メタデータ登録と renderer 呼び出しをまとめる。
 #let post(
   renderer: none,
-  slug: none,
+  permalink: none,
+  aliases: (),
   title: "記事タイトル",
   authors: none,
   create: none,
@@ -220,7 +226,8 @@
   body,
 ) = {
   let meta = post-meta(
-    slug: slug,
+    permalink: permalink,
+    aliases: aliases,
     title: title,
     authors: authors,
     create: create,

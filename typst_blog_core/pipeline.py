@@ -257,7 +257,7 @@ class Pipeline:
             owners: Sequence[PostRecord | None] = post_records if spec.per_post else (None,)
             for post in owners:
                 if post is not None:
-                    destination = context.output_dir / post.slug / spec.filename
+                    destination = context.output_dir / post.route_path / spec.filename
                     output_path = "/" + post.url_slug + "/" + url_quote_path(spec.filename)
                 else:
                     destination = context.output_dir / spec.filename

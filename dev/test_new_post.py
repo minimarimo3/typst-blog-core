@@ -47,7 +47,7 @@ class NewPostTests(unittest.TestCase):
             self.assertNotIn("#let meta = post-meta(", source)
             self.assertNotIn("#metadata(meta) <post-meta>", source)
             self.assertNotIn("#show: article.with(..meta)", source)
-            self.assertIn('slug: "hello-world"', source)
+            self.assertNotIn('slug:', source)
             self.assertIn('title: "Hello \\"Typst\\""', source)
             self.assertIn('description: "A \\\\ short description"', source)
             self.assertIn('tags: ("Typst", "日本語")', source)
@@ -137,10 +137,7 @@ class NewPostTests(unittest.TestCase):
                 index_file,
                 Path(directory).resolve() / slug / "index.typ",
             )
-            self.assertIn(
-                f'slug: "{slug}"',
-                index_file.read_text(encoding="utf-8"),
-            )
+            self.assertNotIn("slug:", index_file.read_text(encoding="utf-8"))
 
     def test_normalizes_new_post_slug_to_nfc(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -154,7 +151,7 @@ class NewPostTests(unittest.TestCase):
                 index_file,
                 Path(directory).resolve() / "ガ" / "index.typ",
             )
-            self.assertIn('slug: "ガ"', index_file.read_text(encoding="utf-8"))
+            self.assertEqual(index_file.parent.name, "ガ")
 
     def test_creates_post_under_configured_posts_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

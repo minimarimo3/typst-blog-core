@@ -24,7 +24,6 @@ def _page_source(
     return f'''#import "/template.typ": site-page
 
 #show: site-page.with(
-  slug: {typst_string(slug)},
   title: {typst_string(title)},
   description: {typst_string(description)},
   draft: {str(draft).lower()},

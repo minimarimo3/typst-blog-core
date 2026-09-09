@@ -70,7 +70,9 @@ class CalVer:
 @dataclass(frozen=True)
 class PostRecord:
     slug: str
+    route_path: str
     url_slug: str
+    aliases: tuple[str, ...]
     title: str
     authors: tuple[str, ...] | None
     create: CalVer
@@ -308,7 +310,7 @@ def load_page_metadata(context: BlogContext, path: Path) -> dict | None:
     return data[0] if data else None
 
 
-def validate_post_slug(value: object) -> str:
+def validate_post_slug(value: object, *, allow_generated: bool = False) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError("slug is required and must be a string")
     normalized = unicodedata.normalize("NFC", value)
@@ -331,13 +333,57 @@ def validate_post_slug(value: object) -> str:
 
     portable_name = value.casefold()
     windows_stem = portable_name.split(".", 1)[0].rstrip(" ")
-    if portable_name in GENERATED_ROUTE_NAMES or windows_stem in PORTABLE_RESERVED_NAMES:
+    if (
+        not allow_generated and portable_name in GENERATED_ROUTE_NAMES
+    ) or windows_stem in PORTABLE_RESERVED_NAMES:
         raise ValueError(f"slug '{value}' is reserved for site output")
     return value
 
 
 def post_slug_to_url_segment(slug: str) -> str:
     return quote(slug, safe="-")
+
+
+def validate_permalink(value: object, *, field: str = "permalink") -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field} must be a non-empty string")
+    if not value.startswith("/") or not value.endswith("/"):
+        raise ValueError(f"{field} must start and end with '/'")
+    if value == "/":
+        raise ValueError(f"{field} may not use the site root")
+    if "?" in value or "#" in value or "//" in value:
+        raise ValueError(f"{field} must be a clean directory URL")
+    parts = value[1:-1].split("/")
+    for index, part in enumerate(parts):
+        try:
+            validate_post_slug(part, allow_generated=index > 0)
+        except ValueError as exc:
+            message = str(exc).replace("slug", "path segment")
+            raise ValueError(f"{field}: {message}") from exc
+    return "/".join(parts)
+
+
+def validate_aliases(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise ValueError("aliases must be an array of permalink strings")
+    aliases = tuple(validate_permalink(alias, field="alias") for alias in value)
+    keys = [portable_route_key(alias) for alias in aliases]
+    if len(keys) != len(set(keys)):
+        raise ValueError("aliases must not contain duplicate URLs")
+    return aliases
+
+
+def route_to_url_path(route_path: str) -> str:
+    return "/".join(post_slug_to_url_segment(part) for part in route_path.split("/"))
+
+
+def default_content_route(source_file: Path, content_root: Path) -> str:
+    relative_dir = source_file.parent.relative_to(content_root)
+    if not relative_dir.parts:
+        raise ValueError("index.typ must be inside a content directory")
+    return validate_permalink("/" + relative_dir.as_posix() + "/")
 
 
 def portable_route_key(value: str) -> str:
@@ -421,10 +467,16 @@ def validate_post_output_routes(
         return
     static_routes = {portable_route_key(path.name): path.name for path in static_dir.iterdir()}
     for post in posts:
-        slug = post.slug if isinstance(post, PostRecord) else post["slug"]
-        collision = static_routes.get(portable_route_key(slug))
-        if collision is not None:
-            raise ValueError(f"post slug {slug!r} conflicts with static/{collision}")
+        routes = (
+            (post.route_path, *post.aliases)
+            if isinstance(post, PostRecord)
+            else (post["route_path"], *post["aliases"])
+        )
+        for route in routes:
+            top_level = route.split("/", 1)[0]
+            collision = static_routes.get(portable_route_key(top_level))
+            if collision is not None:
+                raise ValueError(f"content URL /{route}/ conflicts with static/{collision}")
 
 
 def collect_posts(
@@ -432,14 +484,20 @@ def collect_posts(
     posts_dir: Path | None = None,
 ) -> list[PostRecord]:
     posts: list[PostRecord] = []
-    seen_slugs: dict[str, str] = {}
-    for source_file in discover_post_files(context, posts_dir):
+    posts_root = posts_dir or context.root_dir
+    for source_file in discover_post_files(context, posts_root):
         meta = load_post_metadata(context, source_file)
         if meta is None:
             continue
         relative = source_file.relative_to(context.root_dir)
         try:
-            slug = validate_post_slug(meta.get("slug"))
+            default_route = default_content_route(source_file, posts_root)
+            route_path = (
+                default_route
+                if meta.get("permalink") is None
+                else validate_permalink(meta.get("permalink"))
+            )
+            aliases = validate_aliases(meta.get("aliases", ()))
             create = parse_calver(meta.get("create"))
             update = parse_calver(meta.get("update"))
             tags = validate_post_tags(meta.get("tags", []))
@@ -465,17 +523,14 @@ def collect_posts(
             raise ValueError(f"{relative}: og-image must be a string or none")
         if not isinstance(draft, bool):
             raise ValueError(f"{relative}: draft must be true or false")
-        route_key = portable_route_key(slug)
-        previous_slug = seen_slugs.get(route_key)
-        if previous_slug is not None:
-            raise ValueError(f"post URL collision: {previous_slug!r} and {slug!r}")
-        seen_slugs[route_key] = slug
         if create is None:
             raise ValueError(f"{relative}: create is required")
         posts.append(
             PostRecord(
-                slug=slug,
-                url_slug=post_slug_to_url_segment(slug),
+                slug=relative.as_posix(),
+                route_path=route_path,
+                url_slug=route_to_url_path(route_path),
+                aliases=aliases,
                 title=title,
                 authors=tuple(authors) if authors is not None else None,
                 create=create,
@@ -496,14 +551,20 @@ def collect_posts(
 
 def collect_pages(context: BlogContext) -> list[dict]:
     pages: list[dict] = []
-    seen_slugs: dict[str, str] = {}
+    pages_dir = context.root_dir / PAGES_DIR_NAME
     for source_file in discover_page_files(context):
         meta = load_page_metadata(context, source_file)
         if meta is None:
             continue
         relative = source_file.relative_to(context.root_dir)
         try:
-            slug = validate_post_slug(meta.get("slug"))
+            default_route = default_content_route(source_file, pages_dir)
+            route_path = (
+                default_route
+                if meta.get("permalink") is None
+                else validate_permalink(meta.get("permalink"))
+            )
+            aliases = validate_aliases(meta.get("aliases", ()))
             extra = validate_post_extra(meta.get("extra", {}))
         except ValueError as exc:
             raise ValueError(f"{relative}: {exc}") from exc
@@ -528,15 +589,12 @@ def collect_pages(context: BlogContext) -> list[dict]:
             or not all(isinstance(author, str) and author for author in authors)
         ):
             raise ValueError(f"{relative}: authors must be an array of non-empty strings or none")
-        route_key = portable_route_key(slug)
-        previous_slug = seen_slugs.get(route_key)
-        if previous_slug is not None:
-            raise ValueError(f"page URL collision: {previous_slug!r} and {slug!r}")
-        seen_slugs[route_key] = slug
         pages.append(
             {
-                "slug": slug,
-                "url_slug": post_slug_to_url_segment(slug),
+                "slug": relative.as_posix(),
+                "route_path": route_path,
+                "url_slug": route_to_url_path(route_path),
+                "aliases": aliases,
                 "title": title,
                 "description": description,
                 "authors": tuple(authors) if authors is not None else None,
@@ -554,27 +612,27 @@ def collect_pages(context: BlogContext) -> list[dict]:
 def validate_content_route_collisions(posts: list[PostRecord], pages: list[dict]) -> None:
     owners: dict[str, tuple[str, str]] = {}
     for post in posts:
-        slug = post.slug
-        key = portable_route_key(slug)
-        previous = owners.get(key)
-        if previous is not None:
-            previous_kind, previous_slug = previous
-            raise ValueError(
-                f"content URL collision: {previous_kind} {previous_slug!r} "
-                f"and post {slug!r}"
-            )
-        owners[key] = ("post", slug)
+        for route in (post.route_path, *post.aliases):
+            key = portable_route_key(route)
+            previous = owners.get(key)
+            if previous is not None:
+                previous_kind, previous_route = previous
+                raise ValueError(
+                    f"content URL collision: {previous_kind} /{previous_route}/ "
+                    f"and post /{route}/"
+                )
+            owners[key] = ("post", route)
     for page in pages:
-        slug = page["slug"]
-        key = portable_route_key(slug)
-        previous = owners.get(key)
-        if previous is not None:
-            previous_kind, previous_slug = previous
-            raise ValueError(
-                f"content URL collision: {previous_kind} {previous_slug!r} "
-                f"and page {slug!r}"
-            )
-        owners[key] = ("page", slug)
+        for route in (page["route_path"], *page["aliases"]):
+            key = portable_route_key(route)
+            previous = owners.get(key)
+            if previous is not None:
+                previous_kind, previous_route = previous
+                raise ValueError(
+                    f"content URL collision: {previous_kind} /{previous_route}/ "
+                    f"and page /{route}/"
+                )
+            owners[key] = ("page", route)
 
 
 def format_post_typst_record(

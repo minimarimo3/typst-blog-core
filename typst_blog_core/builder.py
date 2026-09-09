@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import shutil
 from pathlib import Path
 from xml.sax.saxutils import escape
+from urllib.parse import urlsplit
 
 from .context import BlogContext, ROOT_STATIC_FILES, run_typst
 from .git_dates import apply_update_policy
@@ -58,13 +60,15 @@ def build_post(
     post: PostRecord,
     asset_extensions: frozenset[str],
 ) -> None:
-    output_dir = context.output_dir / post.slug
+    output_dir = context.output_dir / post.route_path
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "index.html"
     print(f"Compiling: {post.title}")
     run_typst(
         context,
         "compile",
+        "--input",
+        f"content-id={post.slug}",
         "--features",
         "html",
         "--format",
@@ -82,13 +86,15 @@ def build_page(
     page: dict,
     asset_extensions: frozenset[str],
 ) -> None:
-    output_dir = context.output_dir / page["slug"]
+    output_dir = context.output_dir / page["route_path"]
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "index.html"
     print(f"Compiling page: {page['title']}")
     run_typst(
         context,
         "compile",
+        "--input",
+        f"content-id={page['slug']}",
         "--features",
         "html",
         "--format",
@@ -121,6 +127,48 @@ def copy_static_assets(context: BlogContext) -> None:
             shutil.copy2(source, context.output_dir / filename)
 
 
+def generate_alias_redirects(
+    context: BlogContext,
+    site: dict,
+    content: list[PostRecord | dict],
+) -> None:
+    published_base_path = urlsplit(site["base_url"]).path.rstrip("/")
+    base_path = (
+        context.base_path if context.base_path is not None else published_base_path
+    )
+    language = site["language"]
+    html_language = language if isinstance(language, str) else language["lang"]
+    for item in content:
+        if isinstance(item, PostRecord):
+            aliases = item.aliases
+            url_slug = item.url_slug
+        else:
+            aliases = item["aliases"]
+            url_slug = item["url_slug"]
+        target = f"{base_path}/{url_slug}/"
+        escaped_target = escape(target, {'"': "&quot;"})
+        script_target = json.dumps(target, ensure_ascii=False).replace("<", "\\u003c")
+        html = f'''<!doctype html>
+<html lang="{escape(html_language)}">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <link rel="canonical" href="{escape(site['base_url'])}/{url_slug}/">
+  <meta http-equiv="refresh" content="0; url={escaped_target}">
+  <title>Moved</title>
+</head>
+<body>
+  <p>This page has moved to <a href="{escaped_target}">{escaped_target}</a>.</p>
+  <script>location.replace({script_target} + location.search + location.hash)</script>
+</body>
+</html>
+'''
+        for alias in aliases:
+            destination = context.output_dir / alias / "index.html"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(html, encoding="utf-8")
+
+
 def reserved_output_paths(
     context: BlogContext,
     posts: list[PostRecord],
@@ -130,7 +178,8 @@ def reserved_output_paths(
 ) -> set[str]:
     paths = {"index.html", "404.html", "feed.xml", "sitemap.xml", "tags/index.html"}
     for post in posts:
-        paths.add(f"{post.slug}/index.html")
+        paths.add(f"{post.route_path}/index.html")
+        paths.update(f"{alias}/index.html" for alias in post.aliases)
         for asset in post.source_dir.rglob("*"):
             if (
                 asset.is_file()
@@ -138,11 +187,12 @@ def reserved_output_paths(
                 and asset.suffix.lower() in asset_extensions
             ):
                 relative = asset.relative_to(post.source_dir).as_posix()
-                paths.add(f"{post.slug}/{relative}")
+                paths.add(f"{post.route_path}/{relative}")
         for tag in post.tags:
             paths.add(f"tags/{tag_slugs[tag]}/index.html")
     for page in pages:
-        paths.add(f"{page['slug']}/index.html")
+        paths.add(f"{page['route_path']}/index.html")
+        paths.update(f"{alias}/index.html" for alias in page["aliases"])
         for asset in page["source_dir"].rglob("*"):
             if (
                 asset.is_file()
@@ -150,7 +200,7 @@ def reserved_output_paths(
                 and asset.suffix.lower() in asset_extensions
             ):
                 relative = asset.relative_to(page["source_dir"]).as_posix()
-                paths.add(f"{page['slug']}/{relative}")
+                paths.add(f"{page['route_path']}/{relative}")
     for source_dir in (context.theme_static_dir, context.user_static_dir):
         if source_dir.is_dir():
             paths.update(
@@ -514,6 +564,7 @@ def build(
     print("Generating RSS and sitemap...")
     generate_rss(context, site, posts)
     generate_sitemap(context, site, posts, pages)
+    generate_alias_redirects(context, site, active_posts + active_pages)
     _run_after_html(pipeline, task)
     _run_post_build(pipeline, task)
     print("Build complete.")

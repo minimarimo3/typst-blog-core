@@ -60,7 +60,6 @@ def default_post_template(post: PostTemplateContext) -> str:
     return f'''#import "/template.typ": post, calver
 
 #show: post.with(
-  slug: {typst_string(post.slug)},
   title: {typst_string(post.title)},
   create: calver({post.create.year}, {post.create.month}, {post.create.day}),
   description: {typst_string(post.description)},

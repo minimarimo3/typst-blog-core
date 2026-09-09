@@ -4,7 +4,8 @@
 
 /// 汎用ページのメタデータを構築する。
 #let page-meta(
-  slug: none,
+  permalink: none,
+  aliases: (),
   title: "ページタイトル",
   description: none,
   authors: none,
@@ -15,7 +16,8 @@
 ) = {
   assert(type(extra) == dictionary, message: "extra must be a dictionary")
   (
-    slug: slug,
+    permalink: permalink,
+    aliases: aliases,
     title: title,
     description: description,
     authors: authors,
@@ -27,7 +29,8 @@
 }
 
 #let _page-data(
-  slug,
+  permalink,
+  aliases,
   title,
   description,
   authors,
@@ -37,16 +40,16 @@
   extra,
   body,
 ) = {
-  assert(slug != none, message: "slug is required")
   assert(description != none, message: "description is required")
   assert(type(extra) == dictionary, message: "extra must be a dictionary")
 
-  let generated = load-build-data().pages.at(slug)
+  let content-id = sys.inputs.at("content-id")
+  let generated = load-build-data().pages.at(content-id)
   let document-authors = if authors == none { (site.author.name,) } else { authors }
   (
     site: site,
     page: (
-      slug: slug,
+      slug: content-id,
       url-slug: generated.at("url-slug"),
       title: title,
       description: description,
@@ -64,7 +67,8 @@
 /// 汎用ページを完成HTMLへ変換する。paged出力では本文だけを描画する。
 #let render-page(
   renderer: none,
-  slug: none,
+  permalink: none,
+  aliases: (),
   title: "ページタイトル",
   description: none,
   authors: none,
@@ -90,7 +94,8 @@
 
   assert(renderer != none, message: "page renderer is required; bind it from /template.typ")
   renderer(_page-data(
-    slug,
+    permalink,
+    aliases,
     title,
     description,
     document-authors,
@@ -105,7 +110,8 @@
 /// 汎用ページのメタデータ登録とrenderer呼び出しをまとめる。
 #let site-page(
   renderer: none,
-  slug: none,
+  permalink: none,
+  aliases: (),
   title: "ページタイトル",
   description: none,
   authors: none,
@@ -116,7 +122,8 @@
   body,
 ) = {
   let meta = page-meta(
-    slug: slug,
+    permalink: permalink,
+    aliases: aliases,
     title: title,
     description: description,
     authors: authors,

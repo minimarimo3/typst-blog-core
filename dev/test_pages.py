@@ -37,7 +37,6 @@ class PageMetadataTests(unittest.TestCase):
                 patch(
                     "typst_blog_core.metadata.load_page_metadata",
                     return_value={
-                        "slug": "このサイトについて",
                         "title": "About",
                         "description": "About this site",
                         "draft": False,
@@ -48,18 +47,26 @@ class PageMetadataTests(unittest.TestCase):
             ):
                 pages = collect_pages(context)
 
-            self.assertEqual(pages[0]["slug"], "このサイトについて")
-            self.assertTrue(pages[0]["url_slug"].startswith("%E3%81%93"))
+            self.assertEqual(pages[0]["route_path"], "about")
+            self.assertEqual(pages[0]["url_slug"], "about")
             self.assertEqual(pages[0]["extra"], {"layout": "wide"})
 
     def test_rejects_post_and_page_route_collision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            post = make_post_record(Path(directory), slug="About")
+            post = make_post_record(Path(directory), route_path="About")
             with self.assertRaisesRegex(ValueError, "content URL collision"):
                 validate_content_route_collisions(
                     [post],
-                    [{"slug": "about"}],
+                    [{"route_path": "about", "aliases": ()}],
                 )
+
+    def test_rejects_alias_that_claims_a_canonical_route(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = make_post_record(root, route_path="first", aliases=("second",))
+            second = make_post_record(root, slug="second", route_path="second")
+            with self.assertRaisesRegex(ValueError, "content URL collision"):
+                validate_content_route_collisions([first, second], [])
 
     def test_generated_data_contains_pages(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -71,7 +78,9 @@ class PageMetadataTests(unittest.TestCase):
                 pages=[
                     {
                         "slug": "about",
+                        "route_path": "about",
                         "url_slug": "about",
+                        "aliases": (),
                         "draft": False,
                         "index": True,
                         "extra": {"layout": "wide"},
