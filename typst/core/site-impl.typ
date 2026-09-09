@@ -15,10 +15,8 @@
 ///     // heading / math / 任意名のフォントも追加可
 ///   )
 ///   ```
-/// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `socials`（`x` / `misskey` / `github` の URL）を含む辞書
+/// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `links`（`id` / `label` / `url` を持つ配列）を含む辞書
 /// - analytics (dictionary): アナリティクス設定。`cloudflare_token`（str | none）を含む辞書
-/// - feedback (dictionary): フィードバック設定。`google_form_url`（str | none）と `entry_id`（str | none）を含む辞書
-/// - share (dictionary): シェアボタン設定。`x`, `misskey`, `copy` の各 bool を含む辞書
 /// - github_repo (str, none): GitHub リポジトリの URL（例: `"https://github.com/user/repo"`）。設定すると記事ページに編集履歴リンクが表示される
 /// -> dictionary
 #let _site(
@@ -33,8 +31,6 @@
   fonts: none,
   author: none,
   analytics: (cloudflare_token: none),
-  feedback: (google_form_url: none, entry_id: none),
-  share: none,
   github_repo: none,
 ) = {
   let _req = (v, f) => assert(
@@ -133,26 +129,29 @@
   assert(type(author) == dictionary, message: "site.author: 辞書が必要です")
   _req(author.at("name", default: none), "author.name")
   assert(type(author.at("bio", default: "")) == str, message: "site.author.bio: 文字列が必要です")
-  let _soc = author.at("socials", default: (:))
-  _url(_soc.at("x",       default: ""), "author.socials.x")
-  _url(_soc.at("misskey",  default: ""), "author.socials.misskey")
-  _url(_soc.at("github",   default: ""), "author.socials.github")
-
-  // share
-  assert(type(share) == dictionary, message: "site.share: 辞書が必要です")
-  assert(type(share.at("x",       default: none)) == bool, message: "site.share.x: true/false が必要です")
-  assert(type(share.at("misskey", default: none)) == bool, message: "site.share.misskey: true/false が必要です")
-  assert(type(share.at("copy",    default: none)) == bool, message: "site.share.copy: true/false が必要です")
+  let links = author.at("links", default: ())
+  assert(type(links) == array, message: "site.author.links: 配列が必要です")
+  for (index, link) in links.enumerate() {
+    assert(type(link) == dictionary, message: "site.author.links.at(" + str(index) + "): 辞書が必要です")
+    assert(
+      link.keys().all(key => key in ("id", "label", "url")),
+      message: "site.author.links.at(" + str(index) + "): id, label, url 以外のキーは使用できません",
+    )
+    let id = link.at("id", default: none)
+    _req(id, "author.links.at(" + str(index) + ").id")
+    assert(
+      id.clusters().all(character => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".contains(character)),
+      message: "site.author.links.at(" + str(index) + ").id: 英数字・アンダースコア・ハイフンのみ使用可能です",
+    )
+    _req(link.at("label", default: none), "author.links.at(" + str(index) + ").label")
+    let url = link.at("url", default: none)
+    assert(type(url) == str and url != "", message: "site.author.links.at(" + str(index) + ").url: 空でないURLが必要です")
+    _url(url, "author.links.at(" + str(index) + ").url")
+  }
 
   // analytics（省略可・設定する場合は文字列）
   let _cf = analytics.at("cloudflare_token", default: none)
   assert(_cf == none or type(_cf) == str, message: "site.analytics.cloudflare_token: none か文字列が必要です")
-
-  // feedback（省略可・設定する場合は文字列）
-  let _gf  = feedback.at("google_form_url", default: none)
-  let _eid = feedback.at("entry_id",        default: none)
-  assert(_gf  == none or type(_gf)  == str, message: "site.feedback.google_form_url: none か文字列が必要です")
-  assert(_eid == none or type(_eid) == str, message: "site.feedback.entry_id: none か文字列が必要です")
 
   // github_repo（省略可・設定する場合は URL 文字列）
   assert(
@@ -163,6 +162,6 @@
   (
     title: title, description: description, base_url: base_url, language: language,
     theme: theme, posts_dir: posts_dir, update_policy: update_policy, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
-    feedback: feedback, share: share, github_repo: github_repo,
+    github_repo: github_repo,
   )
 }

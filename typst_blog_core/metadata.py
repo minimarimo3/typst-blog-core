@@ -15,6 +15,8 @@ from .context import BlogContext, run_typst
 SITE_METADATA_LABEL = "<site-meta>"
 EXTENSIONS_METADATA_LABEL = "<extensions-meta>"
 POST_METADATA_LABEL = "<post-meta>"
+PAGE_METADATA_LABEL = "<page-meta>"
+PAGES_DIR_NAME = "pages"
 EXCLUDED_DIRS = {
     ".git",
     ".github",
@@ -36,7 +38,7 @@ PORTABLE_RESERVED_NAMES = {
     *(f"com{number}" for number in range(1, 10)),
     *(f"lpt{number}" for number in range(1, 10)),
 }
-RESERVED_POST_DIRS = EXCLUDED_DIRS | {"static"}
+RESERVED_POST_DIRS = EXCLUDED_DIRS | {"static", PAGES_DIR_NAME}
 WINDOWS_FORBIDDEN_FILENAME_CHARS = frozenset('<>:"/\\|?*')
 MAX_PORTABLE_FILENAME_BYTES = 255
 
@@ -224,8 +226,25 @@ def discover_post_files(
             continue
         if any(part in EXCLUDED_DIRS for part in path.relative_to(context.root_dir).parts):
             continue
+        if path.is_relative_to(context.root_dir / PAGES_DIR_NAME):
+            continue
         post_files.append(path)
     return sorted(post_files)
+
+
+def discover_page_files(context: BlogContext) -> list[Path]:
+    pages_dir = context.root_dir / PAGES_DIR_NAME
+    if not pages_dir.is_dir():
+        return []
+    return sorted(
+        path
+        for path in pages_dir.rglob("index.typ")
+        if not any(part in EXCLUDED_DIRS for part in path.relative_to(pages_dir).parts)
+    )
+
+
+def discover_content_files(context: BlogContext) -> list[Path]:
+    return sorted({*discover_post_files(context), *discover_page_files(context)})
 
 
 def load_post_metadata(context: BlogContext, path: Path) -> dict | None:
@@ -233,6 +252,15 @@ def load_post_metadata(context: BlogContext, path: Path) -> dict | None:
         context,
         str(path.relative_to(context.root_dir)),
         POST_METADATA_LABEL,
+    )
+    return data[0] if data else None
+
+
+def load_page_metadata(context: BlogContext, path: Path) -> dict | None:
+    data = eval_metadata_values(
+        context,
+        str(path.relative_to(context.root_dir)),
+        PAGE_METADATA_LABEL,
     )
     return data[0] if data else None
 
@@ -403,6 +431,79 @@ def collect_posts(context: BlogContext, posts_dir: Path | None = None) -> list[d
     return posts
 
 
+def collect_pages(context: BlogContext) -> list[dict]:
+    pages: list[dict] = []
+    seen_slugs: dict[str, str] = {}
+    for source_file in discover_page_files(context):
+        meta = load_page_metadata(context, source_file)
+        if meta is None:
+            continue
+        relative = source_file.relative_to(context.root_dir)
+        try:
+            slug = validate_post_slug(meta.get("slug"))
+            extra = validate_post_extra(meta.get("extra", {}))
+        except ValueError as exc:
+            raise ValueError(f"{relative}: {exc}") from exc
+        title = meta.get("title")
+        description = meta.get("description")
+        draft = meta.get("draft", True)
+        indexed = meta.get("index", True)
+        og_image = meta.get("og-image")
+        authors = meta.get("authors")
+        if not isinstance(title, str) or not title:
+            raise ValueError(f"{relative}: title is required")
+        if not isinstance(description, str) or not description:
+            raise ValueError(f"{relative}: description is required")
+        if not isinstance(draft, bool):
+            raise ValueError(f"{relative}: draft must be true or false")
+        if not isinstance(indexed, bool):
+            raise ValueError(f"{relative}: index must be true or false")
+        if og_image is not None and not isinstance(og_image, str):
+            raise ValueError(f"{relative}: og-image must be a string or none")
+        if authors is not None and (
+            not isinstance(authors, (list, tuple))
+            or not all(isinstance(author, str) and author for author in authors)
+        ):
+            raise ValueError(f"{relative}: authors must be an array of non-empty strings or none")
+        route_key = portable_route_key(slug)
+        previous_slug = seen_slugs.get(route_key)
+        if previous_slug is not None:
+            raise ValueError(f"page URL collision: {previous_slug!r} and {slug!r}")
+        seen_slugs[route_key] = slug
+        pages.append(
+            {
+                "slug": slug,
+                "url_slug": post_slug_to_url_segment(slug),
+                "title": title,
+                "description": description,
+                "authors": tuple(authors) if authors is not None else None,
+                "og_image": og_image,
+                "draft": draft,
+                "index": indexed,
+                "extra": extra,
+                "source_file": source_file,
+                "source_dir": source_file.parent,
+            }
+        )
+    return pages
+
+
+def validate_content_route_collisions(posts: list[dict], pages: list[dict]) -> None:
+    owners: dict[str, tuple[str, str]] = {}
+    for kind, entries in (("post", posts), ("page", pages)):
+        for entry in entries:
+            slug = entry["slug"]
+            key = portable_route_key(slug)
+            previous = owners.get(key)
+            if previous is not None:
+                previous_kind, previous_slug = previous
+                raise ValueError(
+                    f"content URL collision: {previous_kind} {previous_slug!r} "
+                    f"and {kind} {slug!r}"
+                )
+            owners[key] = (kind, slug)
+
+
 def write_generated_site_data(
     context: BlogContext,
     posts: list[dict],
@@ -411,10 +512,12 @@ def write_generated_site_data(
     include_drafts: bool = False,
     post_outputs: dict[str, list[dict[str, str]]] | None = None,
     site_outputs: list[dict[str, str]] | None = None,
+    pages: list[dict] | None = None,
 ) -> None:
     context.generated_site_data_file.parent.mkdir(parents=True, exist_ok=True)
     post_outputs = post_outputs or {}
     site_outputs = site_outputs or []
+    pages = pages or []
     visible_posts = (
         posts if include_drafts else [post for post in posts if not post["draft"]]
     )
@@ -457,6 +560,24 @@ def write_generated_site_data(
         lines.append(")")
     else:
         lines.append("#let posts = (:)")
+    lines.append("")
+    visible_pages = pages if include_drafts else [page for page in pages if not page["draft"]]
+    if visible_pages:
+        lines.append("#let pages = (")
+        for page in visible_pages:
+            lines.extend(
+                [
+                    f"  {typst_string(page['slug'])}: (",
+                    f"    url-slug: {typst_string(page['url_slug'])},",
+                    f"    draft: {'true' if page['draft'] else 'false'},",
+                    f"    index: {'true' if page['index'] else 'false'},",
+                    f"    extra: {format_typst_json(page['extra'])},",
+                    "  ),",
+                ]
+            )
+        lines.append(")")
+    else:
+        lines.append("#let pages = (:)")
     lines.append("")
     if tag_slugs:
         lines.append("#let tag-slugs = (")

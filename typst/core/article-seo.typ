@@ -44,15 +44,7 @@
 }
 
 #let _site-author-same-as() = {
-  let socials = site.author.at("socials", default: (:))
-  let urls = ()
-  for key in ("x", "misskey", "github") {
-    let url = socials.at(key, default: "")
-    if url != "" {
-      urls.push(url)
-    }
-  }
-  urls
+  site.author.at("links", default: ()).map(link => link.url)
 }
 
 #let _person-json-ld(name) = {

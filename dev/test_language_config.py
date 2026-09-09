@@ -25,8 +25,7 @@ def evaluate_typst(
     main: (pdf: "Noto Serif CJK JP", web: none),
     code: (pdf: "Fira Code", web: none),
   ),
-  author: (name: "Test", bio: "", socials: (:)),
-  share: (x: true, misskey: true, copy: true),
+  author: (name: "Test", bio: "", links: ()),
 )
 {body}
 '''

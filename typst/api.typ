@@ -16,6 +16,11 @@
   article as core-article,
   post as core-post,
 )
+#import "core/page.typ": (
+  page-meta as core-page-meta,
+  render-page as core-render-page,
+  site-page as core-site-page,
+)
 #import "core/page-data.typ": (
   home-page-data as core-home-page-data,
   tag-page-data as core-tag-page-data,
@@ -50,6 +55,9 @@
 #let post-meta = core-post-meta
 #let article = core-article
 #let post = core-post
+#let page-meta = core-page-meta
+#let render-page = core-render-page
+#let site-page = core-site-page
 #let home-page-data = core-home-page-data
 #let tag-page-data = core-tag-page-data
 #let tags-index-page-data = core-tags-index-page-data

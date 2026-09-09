@@ -51,8 +51,7 @@ def site_source(web: str) -> str:
     main: (pdf: "Noto Serif CJK JP", web: {web}, weights: "400;700", fallback: "serif"),
     code: (pdf: "Fira Code", web: ("Fira Code",), weights: none, fallback: none),
   ),
-  author: (name: "Test", bio: "", socials: (:)),
-  share: (x: true, misskey: true, copy: true),
+  author: (name: "Test", bio: "", links: ()),
 )
 #metadata(value) <result>
 '''

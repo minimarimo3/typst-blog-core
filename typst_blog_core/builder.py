@@ -9,6 +9,7 @@ from .context import BlogContext, ROOT_STATIC_FILES, STATIC_EXTENSIONS, run_typs
 from .git_dates import apply_update_policy
 from .metadata import (
     build_tag_slug_map,
+    collect_pages,
     collect_posts,
     format_typst_json,
     format_typst_calver,
@@ -16,6 +17,7 @@ from .metadata import (
     resolve_posts_dir,
     typst_string,
     validate_post_output_routes,
+    validate_content_route_collisions,
     validate_extension_assets,
     write_generated_site_data,
 )
@@ -31,13 +33,13 @@ from .pipeline import (
 )
 
 
-def copy_post_assets(post: dict, output_dir: Path) -> None:
-    for asset in post["source_dir"].rglob("*"):
-        if not asset.is_file() or asset == post["source_file"]:
+def copy_content_assets(content: dict, output_dir: Path) -> None:
+    for asset in content["source_dir"].rglob("*"):
+        if not asset.is_file() or asset == content["source_file"]:
             continue
         if asset.suffix.lower() not in STATIC_EXTENSIONS:
             continue
-        destination = output_dir / asset.relative_to(post["source_dir"])
+        destination = output_dir / asset.relative_to(content["source_dir"])
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(asset, destination)
 
@@ -59,7 +61,27 @@ def build_post(context: BlogContext, post: dict) -> None:
         str(post["source_file"].relative_to(context.root_dir)),
         str(output_file.relative_to(context.root_dir)),
     )
-    copy_post_assets(post, output_dir)
+    copy_content_assets(post, output_dir)
+
+
+def build_page(context: BlogContext, page: dict) -> None:
+    output_dir = context.output_dir / page["slug"]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / "index.html"
+    print(f"Compiling page: {page['title']}")
+    run_typst(
+        context,
+        "compile",
+        "--features",
+        "html",
+        "--format",
+        "html",
+        "--root",
+        ".",
+        str(page["source_file"].relative_to(context.root_dir)),
+        str(output_file.relative_to(context.root_dir)),
+    )
+    copy_content_assets(page, output_dir)
 
 
 def copy_static_dir(context: BlogContext, source_dir: Path) -> None:
@@ -85,6 +107,7 @@ def copy_static_assets(context: BlogContext) -> None:
 def reserved_output_paths(
     context: BlogContext,
     posts: list[dict],
+    pages: list[dict],
     tag_slugs: dict[str, str],
 ) -> set[str]:
     paths = {"index.html", "404.html", "feed.xml", "sitemap.xml", "tags/index.html"}
@@ -100,6 +123,16 @@ def reserved_output_paths(
                 paths.add(f"{post['slug']}/{relative}")
         for tag in post["tags"]:
             paths.add(f"tags/{tag_slugs[tag]}/index.html")
+    for page in pages:
+        paths.add(f"{page['slug']}/index.html")
+        for asset in page["source_dir"].rglob("*"):
+            if (
+                asset.is_file()
+                and asset != page["source_file"]
+                and asset.suffix.lower() in STATIC_EXTENSIONS
+            ):
+                relative = asset.relative_to(page["source_dir"]).as_posix()
+                paths.add(f"{page['slug']}/{relative}")
     for source_dir in (context.theme_static_dir, context.user_static_dir):
         if source_dir.is_dir():
             paths.update(
@@ -295,7 +328,12 @@ def generate_rss(context: BlogContext, site: dict, posts: list[dict]) -> None:
     (context.output_dir / "feed.xml").write_text(xml, encoding="utf-8")
 
 
-def generate_sitemap(context: BlogContext, site: dict, posts: list[dict]) -> None:
+def generate_sitemap(
+    context: BlogContext,
+    site: dict,
+    posts: list[dict],
+    pages: list[dict],
+) -> None:
     base_url = site["base_url"]
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -316,6 +354,15 @@ def generate_sitemap(context: BlogContext, site: dict, posts: list[dict]) -> Non
     <loc>{escape(link)}</loc>
     <lastmod>{last_mod}</lastmod>
     <priority>0.8</priority>
+  </url>
+"""
+    for page in (
+        page for page in pages if not page["draft"] and page["index"]
+    ):
+        link = f"{base_url}/{page['url_slug']}/"
+        xml += f"""  <url>
+    <loc>{escape(link)}</loc>
+    <priority>0.6</priority>
   </url>
 """
     xml += "</urlset>"
@@ -398,19 +445,23 @@ def build(
     validate_extension_assets(context)
     posts_dir = resolve_posts_dir(context, site)
     posts = collect_posts(context, posts_dir)
+    pages = collect_pages(context)
     apply_update_policy(context, site, posts)
     tag_slugs = build_tag_slug_map(posts)
-    validate_post_output_routes(posts, context.user_static_dir)
-    validate_post_output_routes(posts, context.theme_static_dir)
+    validate_content_route_collisions(posts, pages)
+    content = posts + pages
+    validate_post_output_routes(content, context.user_static_dir)
+    validate_post_output_routes(content, context.theme_static_dir)
     published_count = sum(1 for post in posts if not post["draft"])
     print(f"Found {len(posts)} posts ({published_count} published).")
     active_posts = posts if include_drafts else [post for post in posts if not post["draft"]]
+    active_pages = pages if include_drafts else [page for page in pages if not page["draft"]]
     pipeline = load_pipeline(context)
     post_outputs, site_outputs = pipeline.plan_outputs(
         context,
         active_posts,
         mode,
-        reserved_output_paths(context, active_posts, tag_slugs),
+        reserved_output_paths(context, active_posts, active_pages, tag_slugs),
     )
 
     if context.build_dir.exists():
@@ -437,19 +488,25 @@ def build(
             for slug, outputs in post_outputs.items()
         },
         site_outputs=[output.as_theme_data() for output in site_outputs],
+        pages=pages,
     )
     for post in posts:
         if post["draft"] and not include_drafts:
             print(f"Draft skip: {post['title']}")
         else:
             build_post(context, post)
+    for page in pages:
+        if page["draft"] and not include_drafts:
+            print(f"Draft page skip: {page['title']}")
+        else:
+            build_page(context, page)
     print("Building static pages...")
     build_static_pages(context)
     print("Building tag pages...")
     build_tag_pages(context, posts, tag_slugs, include_drafts=include_drafts)
     print("Generating RSS and sitemap...")
     generate_rss(context, site, posts)
-    generate_sitemap(context, site, posts)
+    generate_sitemap(context, site, posts, pages)
     _run_after_html(pipeline, task)
     _run_post_build(pipeline, task)
     print("Build complete.")

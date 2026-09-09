@@ -5,6 +5,7 @@
   let values = dictionary(generated)
   (
     posts: values.at("posts", default: (:)),
+    pages: values.at("pages", default: (:)),
     tag-slugs: values.at("tag-slugs", default: (:)),
     site-outputs: values.at("site-outputs", default: ()),
   )

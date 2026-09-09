@@ -53,17 +53,31 @@ python3 vendor/typst-blog-core/command.py preview
 ```
 
 Create a minimal post directory and `index.typ` with validated metadata using
-the `new` command. New posts are drafts unless `--publish` is supplied.
+the `new post` command. New posts are drafts unless `--publish` is supplied.
 
 ```sh
-python3 command.py new my-first-post \
+python3 command.py new post my-first-post \
   --title "My First Post" \
   --description "A short description." \
   --tag Typst
 ```
 
+Create non-post content such as About, FAQ, or policy pages with `new page`.
+General pages live below `pages/`, stay out of post lists, tags, adjacent-post
+navigation, and RSS, and use their own theme renderer.
+
+```sh
+python3 command.py new page about \
+  --title "About" \
+  --description "About this site."
+```
+
+General pages are drafts by default. `--publish` publishes immediately, while
+`--no-index` excludes a published utility page from search engines, Pagefind,
+and the sitemap.
+
 The Python package is split by responsibility: `cli.py` dispatches commands,
-`new_post.py` creates posts, `metadata.py` validates and collects metadata,
+`new_post.py` and `new_page.py` create content, `metadata.py` validates and collects metadata,
 `pipeline.py` loads site-owned build extensions, `builder.py` produces the site,
 and `preview.py` owns the local server and watcher. Updating the pinned
 submodule therefore updates all command behavior without copying Python
@@ -120,6 +134,7 @@ short-lived Typst entry documents and calls the renderers exported by
 `/theme/theme.typ`:
 
 - `render-article(data)`
+- `render-page(data)`
 - `render-home(data)`
 - `render-tag(data)`
 - `render-tags-index(data)`

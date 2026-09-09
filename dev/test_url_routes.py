@@ -160,7 +160,8 @@ class GeneratedRouteDataTests(unittest.TestCase):
             write_generated_site_data(context, [], {})
             self.assertEqual(
                 context.generated_site_data_file.read_text(encoding="utf-8"),
-                "#let posts = (:)\n\n#let tag-slugs = (:)\n\n#let site-outputs = ()\n",
+                "#let posts = (:)\n\n#let pages = (:)\n\n"
+                "#let tag-slugs = (:)\n\n#let site-outputs = ()\n",
             )
 
     def test_update_date_uses_calver_data_accepted_by_article_helpers(self) -> None:
