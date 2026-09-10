@@ -8,7 +8,7 @@
 /// - pagination (dictionary): home / tag の一覧分割設定。各項目は enabled (bool) と per_page (int) を持つ
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
 /// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
-/// - asset_extensions (array): 記事・固定ページのディレクトリから出力へコピーするファイル拡張子
+/// - asset_extensions (array): 記事・固定ページのディレクトリから出力へコピーするファイル拡張子。省略時は一般的な画像・動画・音声・フォント・文書形式
 /// - default_og_image (str, none): 記事やページに画像指定がないときに使う既定OGP画像 URL
 /// - fonts (dictionary): フォント設定。`main` と `code` キーが必須で、各々 `pdf` フィールドが必要。```typst
 ///   fonts: (
@@ -32,7 +32,13 @@
   ),
   posts_dir: ".",
   update_policy: "git",
-  asset_extensions: none,
+  asset_extensions: (
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif",
+    ".mp4", ".webm", ".ogv", ".mov",
+    ".mp3", ".m4a", ".ogg", ".oga", ".wav", ".flac", ".aac",
+    ".woff", ".woff2", ".ttf", ".otf",
+    ".pdf", ".js", ".yaml", ".yml", ".bib", ".txt",
+  ),
   default_og_image: none,
   fonts: none,
   author: none,

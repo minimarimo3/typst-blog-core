@@ -214,10 +214,10 @@ dedicated directory. It defaults to `"."`; for example, `posts_dir: "posts"`
 makes both `new` and `build` use the `posts/` tree. Only safe relative paths
 inside the blog root are accepted.
 
-The required `asset_extensions` array in the user-owned `site.typ` controls
-which files beside a post or page are copied to its output directory. Core does
-not keep its own extension allowlist; templates can include the image, video,
-audio, font, and download formats their content needs.
+The optional `asset_extensions` array in the user-owned `site.typ` controls
+which files beside a post or page are copied to its output directory. It defaults
+to the common image, video, audio, font, and document formats included by the
+template. Set it explicitly only when the site needs a different allowlist.
 
 Post update dates use `update_policy: "git"` by default. The build follows the
 history of each post's `index.typ` across renames and combines it with commits
