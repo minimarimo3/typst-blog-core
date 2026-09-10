@@ -7,16 +7,18 @@ from pathlib import Path
 from typing import Sequence
 
 from .builder import build
+from .new_page import PageTemplate, create_page
 from .new_post import PostTemplate, create_post, parse_post_date
-from .new_page import create_page
 from .preview import preview
 
 
 ConfigureNewPostParser = Callable[[argparse.ArgumentParser], None]
+ConfigureNewPageParser = Callable[[argparse.ArgumentParser], None]
 
 
 def _parser(
     configure_new_post: ConfigureNewPostParser | None = None,
+    configure_new_page: ConfigureNewPageParser | None = None,
 ) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create, build, and preview a Typst blog.")
     subparsers = parser.add_subparsers(dest="command")
@@ -71,6 +73,15 @@ def _parser(
         action="store_true",
         help="exclude the page from search engines, Pagefind, and the sitemap",
     )
+    core_page_arguments = {action.dest for action in page_parser._actions}
+    if configure_new_page is not None:
+        configure_new_page(page_parser)
+    custom_page_arguments = tuple(
+        action.dest
+        for action in page_parser._actions
+        if action.dest not in core_page_arguments
+    )
+    page_parser.set_defaults(_custom_page_arguments=custom_page_arguments)
     return parser
 
 
@@ -80,8 +91,10 @@ def main(
     root_dir: Path | str | None = None,
     configure_new_post: ConfigureNewPostParser | None = None,
     new_post_template: PostTemplate | None = None,
+    configure_new_page: ConfigureNewPageParser | None = None,
+    new_page_template: PageTemplate | None = None,
 ) -> int:
-    args = _parser(configure_new_post).parse_args(argv)
+    args = _parser(configure_new_post, configure_new_page).parse_args(argv)
     command = args.command or "build"
     try:
         if command == "build":
@@ -113,6 +126,12 @@ def main(
                     description=args.description,
                     publish=args.publish,
                     indexed=not args.no_index,
+                    extra={
+                        name: getattr(args, name)
+                        for name in args._custom_page_arguments
+                        if getattr(args, name, None) is not None
+                    },
+                    template=new_page_template,
                 )
             display_path = (
                 index_file.relative_to(Path(root_dir).resolve())

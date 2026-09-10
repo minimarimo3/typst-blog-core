@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import re
 import unicodedata
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Sequence
@@ -623,30 +624,44 @@ def collect_pages(context: BlogContext) -> list[dict]:
     return pages
 
 
-def validate_content_route_collisions(posts: list[PostRecord], pages: list[dict]) -> None:
-    owners: dict[str, tuple[str, str]] = {}
+def _iter_content_routes(
+    posts: list[PostRecord],
+    pages: list[dict],
+) -> Iterator[tuple[str, str]]:
     for post in posts:
         for route in (post.route_path, *post.aliases):
-            key = portable_route_key(route)
-            previous = owners.get(key)
-            if previous is not None:
-                previous_kind, previous_route = previous
-                raise ValueError(
-                    f"content URL collision: {previous_kind} /{previous_route}/ "
-                    f"and post /{route}/"
-                )
-            owners[key] = ("post", route)
+            yield "post", route
     for page in pages:
         for route in (page["route_path"], *page["aliases"]):
-            key = portable_route_key(route)
-            previous = owners.get(key)
-            if previous is not None:
-                previous_kind, previous_route = previous
-                raise ValueError(
-                    f"content URL collision: {previous_kind} /{previous_route}/ "
-                    f"and page /{route}/"
-                )
-            owners[key] = ("page", route)
+            yield "page", route
+
+
+def validate_content_route_collisions(posts: list[PostRecord], pages: list[dict]) -> None:
+    owners: dict[str, tuple[str, str]] = {}
+    for kind, route in _iter_content_routes(posts, pages):
+        key = portable_route_key(route)
+        previous = owners.get(key)
+        if previous is not None:
+            previous_kind, previous_route = previous
+            raise ValueError(
+                f"content URL collision: {previous_kind} /{previous_route}/ "
+                f"and {kind} /{route}/"
+            )
+        owners[key] = (kind, route)
+
+
+def validate_content_route_available(
+    route_path: str,
+    posts: list[PostRecord],
+    pages: list[dict],
+) -> None:
+    requested_key = portable_route_key(route_path)
+    for kind, existing_route in _iter_content_routes(posts, pages):
+        if portable_route_key(existing_route) == requested_key:
+            raise ValueError(
+                f"content URL /{route_path}/ is already used by "
+                f"{kind} /{existing_route}/"
+            )
 
 
 def format_post_typst_record(

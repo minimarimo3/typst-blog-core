@@ -18,7 +18,10 @@ from typst_blog_core.metadata import (  # noqa: E402
     validate_content_route_collisions,
     write_generated_site_data,
 )
-from typst_blog_core.new_page import create_page  # noqa: E402
+from typst_blog_core.new_page import (  # noqa: E402
+    PageTemplateContext,
+    create_page,
+)
 from post_factory import make_post_record  # noqa: E402
 
 
@@ -94,6 +97,16 @@ class PageMetadataTests(unittest.TestCase):
 
 
 class NewPageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.site_metadata = patch(
+            "typst_blog_core.new_page.load_site_metadata",
+            return_value={"posts_dir": "."},
+        )
+        self.site_metadata.start()
+
+    def tearDown(self) -> None:
+        self.site_metadata.stop()
+
     def test_creates_page_under_pages_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             index_file = create_page(
@@ -125,6 +138,78 @@ class NewPageTests(unittest.TestCase):
             source = index_file.read_text(encoding="utf-8")
             self.assertIn('draft: false', source)
             self.assertIn('index: false', source)
+
+    def test_rejects_route_used_by_existing_post(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            existing = Path(directory) / "duplicate" / "index.typ"
+            existing.parent.mkdir()
+            existing.write_text("post without a slug field\n", encoding="utf-8")
+            with patch(
+                "typst_blog_core.metadata.load_post_metadata",
+                return_value={
+                    "title": "Duplicate",
+                    "description": "Description",
+                    "create": "2026.09.10",
+                    "draft": False,
+                },
+            ):
+                with self.assertRaisesRegex(ValueError, "content URL /duplicate/"):
+                    create_page(
+                        root_dir=directory,
+                        slug="duplicate",
+                        title="Duplicate",
+                        description="Description",
+                    )
+
+    def test_default_template_writes_extra_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_page(
+                root_dir=directory,
+                slug="course-overview",
+                title="Course overview",
+                description="Course contents",
+                extra={"course": "typst-basics", "lesson": 1},
+            )
+            source = index_file.read_text(encoding="utf-8")
+            self.assertIn(
+                'extra: json(bytes("{\\\"course\\\":\\\"typst-basics\\\",\\\"lesson\\\":1}"))',
+                source,
+            )
+
+    def test_custom_template_receives_validated_context(self) -> None:
+        def template(page: PageTemplateContext) -> str:
+            self.assertEqual(page.slug, "course-overview")
+            self.assertEqual(page.title, "Course overview")
+            self.assertEqual(page.description, "Course contents")
+            self.assertTrue(page.draft)
+            self.assertTrue(page.indexed)
+            return f"course={page.extra['course']}\n"
+
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_page(
+                root_dir=directory,
+                slug="course-overview",
+                title=" Course overview ",
+                description=" Course contents ",
+                extra={"course": "typst-basics"},
+                template=template,
+            )
+            self.assertEqual(index_file.read_text(encoding="utf-8"), "course=typst-basics\n")
+
+    def test_template_failure_does_not_leave_destination(self) -> None:
+        def invalid_template(_page: PageTemplateContext) -> int:
+            return 1
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(TypeError, "new-page template"):
+                create_page(
+                    root_dir=directory,
+                    slug="invalid-template",
+                    title="Invalid template",
+                    description="Description",
+                    template=invalid_template,  # type: ignore[arg-type]
+                )
+            self.assertFalse((Path(directory) / "pages" / "invalid-template").exists())
 
 
 if __name__ == "__main__":

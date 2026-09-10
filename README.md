@@ -149,6 +149,55 @@ General pages are drafts by default. `--publish` publishes immediately, while
 `--no-index` excludes a published utility page from search engines, Pagefind,
 and the sitemap.
 
+### Customize `new page` From The Blog
+
+Pages support the same blog-owned customization points as posts. Pass
+`configure_new_page` to add arguments; their JSON-compatible values are written
+to the standard page template's `extra` dictionary:
+
+```python
+def configure_new_page(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--layout", required=True)
+
+
+def main() -> int:
+    return core_api.main(
+        root_dir=ROOT_DIR,
+        configure_new_page=configure_new_page,
+    )
+```
+
+```sh
+python3 command.py new page course-overview \
+  --title "Course overview" \
+  --description "Course contents." \
+  --layout wide
+```
+
+To replace the generated source, pass `new_page_template`. It receives a
+validated `PageTemplateContext`; `default_page_template()` keeps the standard
+metadata header when only the starter body needs to change:
+
+```python
+def landing_page_template(page: core_api.PageTemplateContext) -> str:
+    source = core_api.default_page_template(page)
+    return source.replace(
+        "// Write the page body below.",
+        "= Welcome\n\nAdd the landing-page content here.",
+    )
+
+
+def main() -> int:
+    return core_api.main(
+        root_dir=ROOT_DIR,
+        configure_new_page=configure_new_page,
+        new_page_template=landing_page_template,
+    )
+```
+
+If neither page customization argument is passed, core uses its standard page
+arguments and template.
+
 The Python package is split by responsibility: `cli.py` dispatches commands,
 `new_post.py` and `new_page.py` create content, `metadata.py` validates and collects metadata,
 `pipeline.py` loads site-owned build extensions, `builder.py` produces the site,

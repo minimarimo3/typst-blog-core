@@ -185,18 +185,27 @@ class NewPostTests(unittest.TestCase):
                 )
             self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
 
-    def test_rejects_slug_used_in_different_directory(self) -> None:
+    def test_rejects_route_used_by_existing_page(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            existing = Path(directory) / "articles" / "index.typ"
-            existing.parent.mkdir()
-            existing.write_text('#let meta = (slug: "duplicate")\n', encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "already used"):
-                create_post(
-                    root_dir=directory,
-                    slug="duplicate",
-                    title="Duplicate",
-                    description="Description",
-                )
+            existing = Path(directory) / "pages" / "duplicate" / "index.typ"
+            existing.parent.mkdir(parents=True)
+            existing.write_text("page without a slug field\n", encoding="utf-8")
+            with patch(
+                "typst_blog_core.metadata.load_page_metadata",
+                return_value={
+                    "title": "Duplicate",
+                    "description": "Description",
+                    "draft": False,
+                    "index": True,
+                },
+            ):
+                with self.assertRaisesRegex(ValueError, "content URL /duplicate/"):
+                    create_post(
+                        root_dir=directory,
+                        slug="duplicate",
+                        title="Duplicate",
+                        description="Description",
+                    )
 
     def test_rejects_route_owned_by_theme_static(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

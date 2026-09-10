@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import re
 import unicodedata
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -9,12 +8,14 @@ from pathlib import Path
 
 from .context import BlogContext
 from .metadata import (
-    discover_content_files,
+    collect_pages,
+    collect_posts,
     format_typst_json,
     load_site_metadata,
     portable_route_key,
     resolve_posts_dir,
     typst_string,
+    validate_content_route_available,
     validate_post_extra,
     validate_post_slug,
     validate_post_tags,
@@ -97,16 +98,12 @@ def create_post(
     if destination.exists():
         relative = destination.relative_to(context.root_dir)
         raise FileExistsError(f"destination already exists: {relative}")
+    validate_content_route_available(
+        slug,
+        collect_posts(context, posts_dir),
+        collect_pages(context),
+    )
     requested_route_key = portable_route_key(slug)
-    for source_file in discover_content_files(context):
-        try:
-            source = source_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
-        match = re.search(r'\bslug\s*:\s*"([^"]+)"', source)
-        if match is not None and portable_route_key(match.group(1)) == requested_route_key:
-            relative = source_file.relative_to(context.root_dir)
-            raise ValueError(f"slug '{slug}' is already used by {relative}")
     for static_dir in (context.theme_static_dir, context.user_static_dir):
         if static_dir.is_dir():
             static_names = {

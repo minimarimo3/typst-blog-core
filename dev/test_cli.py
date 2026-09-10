@@ -87,6 +87,80 @@ class CliTests(unittest.TestCase):
                 "course=advanced\n",
             )
 
+    def test_custom_new_page_arguments_use_default_template(self) -> None:
+        def configure(parser: argparse.ArgumentParser) -> None:
+            parser.add_argument("--layout", required=True)
+            parser.add_argument("--priority", type=int)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "typst_blog_core.new_page.load_site_metadata",
+                return_value={"posts_dir": "."},
+            ):
+                result = api.main(
+                    [
+                        "new",
+                        "page",
+                        "about",
+                        "--title",
+                        "About",
+                        "--description",
+                        "About this site",
+                        "--layout",
+                        "wide",
+                        "--priority",
+                        "1",
+                    ],
+                    root_dir=directory,
+                    configure_new_page=configure,
+                )
+
+            self.assertEqual(result, 0)
+            source = (Path(directory) / "pages" / "about" / "index.typ").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                'extra: json(bytes("{\\\"layout\\\":\\\"wide\\\",\\\"priority\\\":1}"))',
+                source,
+            )
+
+    def test_custom_new_page_template_receives_custom_arguments(self) -> None:
+        def configure(parser: argparse.ArgumentParser) -> None:
+            parser.add_argument("--layout", required=True)
+
+        def template(page: api.PageTemplateContext) -> str:
+            return f"layout={page.extra['layout']}\n"
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "typst_blog_core.new_page.load_site_metadata",
+                return_value={"posts_dir": "."},
+            ):
+                result = api.main(
+                    [
+                        "new",
+                        "page",
+                        "custom",
+                        "--title",
+                        "Custom",
+                        "--description",
+                        "Description",
+                        "--layout",
+                        "landing",
+                    ],
+                    root_dir=directory,
+                    configure_new_page=configure,
+                    new_page_template=template,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                (Path(directory) / "pages" / "custom" / "index.typ").read_text(
+                    encoding="utf-8"
+                ),
+                "layout=landing\n",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
