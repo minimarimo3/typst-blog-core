@@ -18,7 +18,6 @@
 ///   )
 ///   ```
 /// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `links`（`id` / `label` / `url` と省略可能な `icon` を持つ配列）を含む辞書
-/// - analytics (dictionary): アナリティクス設定。`cloudflare_token`（str | none）を含む辞書
 /// - github_repo (str, none): GitHub リポジトリの URL（例: `"https://github.com/user/repo"`）。設定すると記事ページに編集履歴リンクが表示される
 /// -> dictionary
 #let _site(
@@ -37,7 +36,6 @@
   default_og_image: none,
   fonts: none,
   author: none,
-  analytics: (cloudflare_token: none),
   github_repo: none,
 ) = {
   let _req = (v, f) => assert(
@@ -208,10 +206,6 @@
     }
   }
 
-  // analytics（省略可・設定する場合は文字列）
-  let _cf = analytics.at("cloudflare_token", default: none)
-  assert(_cf == none or type(_cf) == str, message: "site.analytics.cloudflare_token: none か文字列が必要です")
-
   // github_repo（省略可・設定する場合は URL 文字列）
   assert(
     github_repo == none or (type(github_repo) == str and (github_repo.starts-with("https://") or github_repo.starts-with("http://"))),
@@ -220,7 +214,7 @@
 
   (
     title: title, description: description, base_url: base_url, language: language,
-    theme: theme, pagination: pagination, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
+    theme: theme, pagination: pagination, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author,
     github_repo: github_repo,
   )
 }
