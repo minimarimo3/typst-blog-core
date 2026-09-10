@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import functools
 import http.server
 import shutil
@@ -19,8 +20,6 @@ from .context import BlogContext, ROOT_STATIC_FILES
 from .metadata import PostRecord, validate_extension_assets, validate_post_output_routes
 
 
-PREVIEW_HOST = "127.0.0.1"
-PREVIEW_PORT = 8000
 PREVIEW_PORT_ATTEMPTS = 10
 PREVIEW_VERSION_PATH = "/__typst_blog_preview_version"
 PREVIEW_SCRIPT_PATH = "/__typst_blog_preview.js"
@@ -348,7 +347,12 @@ def _watch_preview(
         snapshot = _preview_snapshot(root_dir, asset_extensions)
 
 
-def preview(root_dir: Path | str | None = None) -> None:
+def preview(
+    root_dir: Path | str | None = None,
+    *,
+    host: str = "localhost",
+    port: int = 8000,
+) -> None:
     context = BlogContext.create(root_dir, base_path="")
     prepared = _full_preview_build(context.root_dir)
     state = _PreviewState()
@@ -356,16 +360,19 @@ def preview(root_dir: Path | str | None = None) -> None:
     handler = functools.partial(_PreviewRequestHandler, directory=str(context.output_dir))
     server = None
     last_error = None
-    for port in range(PREVIEW_PORT, PREVIEW_PORT + PREVIEW_PORT_ATTEMPTS):
+    last_port = min(port + PREVIEW_PORT_ATTEMPTS - 1, 65535)
+    for candidate_port in range(port, last_port + 1):
         try:
-            server = http.server.ThreadingHTTPServer((PREVIEW_HOST, port), handler)
+            server = http.server.ThreadingHTTPServer((host, candidate_port), handler)
             break
         except OSError as exc:
+            if exc.errno != errno.EADDRINUSE:
+                raise
             last_error = exc
     if server is None:
         raise RuntimeError(
-            f"Could not start preview server on ports {PREVIEW_PORT}-"
-            f"{PREVIEW_PORT + PREVIEW_PORT_ATTEMPTS - 1}: {last_error}"
+            f"Could not start preview server on {host}, ports {port}-{last_port}: "
+            f"{last_error}"
         ) from last_error
 
     watcher = threading.Thread(
@@ -375,9 +382,10 @@ def preview(root_dir: Path | str | None = None) -> None:
     )
     watcher.start()
     selected_port = server.server_address[1]
-    if selected_port != PREVIEW_PORT:
-        print(f"Port {PREVIEW_PORT} is in use; using {selected_port} instead.")
-    print(f"Preview server: http://localhost:{selected_port}")
+    if selected_port != port:
+        print(f"Port {port} is in use; using {selected_port} instead.")
+    display_host = f"[{host}]" if ":" in host else host
+    print(f"Preview server: http://{display_host}:{selected_port}")
     print("Watching for changes. Press Ctrl+C to stop.")
     try:
         server.serve_forever()

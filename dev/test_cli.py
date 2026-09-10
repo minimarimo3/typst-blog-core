@@ -15,6 +15,30 @@ from typst_blog_core import api  # noqa: E402
 
 
 class CliTests(unittest.TestCase):
+    def test_preview_uses_configured_defaults(self) -> None:
+        with patch("typst_blog_core.cli.preview") as preview:
+            result = api.main(
+                ["preview"],
+                root_dir="blog",
+                preview_host="0.0.0.0",
+                preview_port=9000,
+            )
+
+        self.assertEqual(result, 0)
+        preview.assert_called_once_with(root_dir="blog", host="0.0.0.0", port=9000)
+
+    def test_preview_options_override_configured_defaults(self) -> None:
+        with patch("typst_blog_core.cli.preview") as preview:
+            result = api.main(
+                ["preview", "--host", "127.0.0.1", "--port", "9100"],
+                root_dir="blog",
+                preview_host="0.0.0.0",
+                preview_port=9000,
+            )
+
+        self.assertEqual(result, 0)
+        preview.assert_called_once_with(root_dir="blog", host="127.0.0.1", port=9100)
+
     def test_custom_new_post_arguments_use_default_template(self) -> None:
         def configure(parser: argparse.ArgumentParser) -> None:
             parser.add_argument("--course", required=True)

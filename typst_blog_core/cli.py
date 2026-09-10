@@ -16,15 +16,38 @@ ConfigureNewPostParser = Callable[[argparse.ArgumentParser], None]
 ConfigureNewPageParser = Callable[[argparse.ArgumentParser], None]
 
 
+def _preview_port(value: str) -> int:
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
 def _parser(
     configure_new_post: ConfigureNewPostParser | None = None,
     configure_new_page: ConfigureNewPageParser | None = None,
+    *,
+    preview_host: str = "localhost",
+    preview_port: int = 8000,
 ) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create, build, and preview a Typst blog.")
     subparsers = parser.add_subparsers(dest="command")
 
     subparsers.add_parser("build", help="build the deployable site")
-    subparsers.add_parser("preview", help="build, serve, watch, and live-reload locally")
+    preview_parser = subparsers.add_parser(
+        "preview", help="build, serve, watch, and live-reload locally"
+    )
+    preview_parser.add_argument(
+        "--host",
+        default=preview_host,
+        help=f"server host (default: {preview_host})",
+    )
+    preview_parser.add_argument(
+        "--port",
+        type=_preview_port,
+        default=str(preview_port),
+        help=f"starting server port (default: {preview_port})",
+    )
 
     new_parser = subparsers.add_parser("new", help="create a post or page")
     new_subparsers = new_parser.add_subparsers(dest="content_type", required=True)
@@ -93,14 +116,21 @@ def main(
     new_post_template: PostTemplate | None = None,
     configure_new_page: ConfigureNewPageParser | None = None,
     new_page_template: PageTemplate | None = None,
+    preview_host: str = "localhost",
+    preview_port: int = 8000,
 ) -> int:
-    args = _parser(configure_new_post, configure_new_page).parse_args(argv)
+    args = _parser(
+        configure_new_post,
+        configure_new_page,
+        preview_host=preview_host,
+        preview_port=preview_port,
+    ).parse_args(argv)
     command = args.command or "build"
     try:
         if command == "build":
             build(root_dir=root_dir)
         elif command == "preview":
-            preview(root_dir=root_dir)
+            preview(root_dir=root_dir, host=args.host, port=args.port)
         elif command == "new":
             if args.content_type == "post":
                 index_file = create_post(

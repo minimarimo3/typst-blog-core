@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import errno
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 
 CORE_DIR = Path(__file__).resolve().parents[1]
@@ -58,16 +59,61 @@ class PreviewTests(unittest.TestCase):
                 patch(
                     "typst_blog_core.preview.http.server.ThreadingHTTPServer",
                     return_value=server,
-                ),
+                ) as server_factory,
                 patch("typst_blog_core.preview.threading.Thread") as thread,
             ):
                 preview(directory)
 
             build.assert_called_once_with(Path(directory).resolve())
+            server_factory.assert_called_once_with(("localhost", 8000), ANY)
             thread.return_value.start.assert_called_once_with()
             self.assertEqual(thread.call_args.kwargs["args"][2], prepared)
             server.serve_forever.assert_called_once_with()
             server.server_close.assert_called_once_with()
+
+    def test_retries_with_next_port_when_starting_port_is_in_use(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            server = Mock()
+            server.server_address = ("0.0.0.0", 9001)
+            prepared = Mock(asset_extensions=frozenset())
+            address_in_use = OSError(errno.EADDRINUSE, "Address already in use")
+            with (
+                patch(
+                    "typst_blog_core.preview._full_preview_build",
+                    return_value=prepared,
+                ),
+                patch(
+                    "typst_blog_core.preview.http.server.ThreadingHTTPServer",
+                    side_effect=[address_in_use, server],
+                ) as server_factory,
+                patch("typst_blog_core.preview.threading.Thread"),
+            ):
+                preview(directory, host="0.0.0.0", port=9000)
+
+            self.assertEqual(
+                [call.args[0] for call in server_factory.call_args_list],
+                [("0.0.0.0", 9000), ("0.0.0.0", 9001)],
+            )
+
+    def test_does_not_retry_other_socket_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            prepared = Mock(asset_extensions=frozenset())
+            permission_error = OSError(errno.EACCES, "Permission denied")
+            with (
+                patch(
+                    "typst_blog_core.preview._full_preview_build",
+                    return_value=prepared,
+                ),
+                patch(
+                    "typst_blog_core.preview.http.server.ThreadingHTTPServer",
+                    side_effect=permission_error,
+                ) as server_factory,
+            ):
+                with self.assertRaises(OSError) as raised:
+                    preview(directory, port=80)
+
+            self.assertIs(raised.exception, permission_error)
+            server_factory.assert_called_once()
 
     def test_changed_paths_reports_added_removed_and_modified_files(self) -> None:
         before = {"same.css": (1, 1), "changed.css": (1, 1), "removed.js": (1, 1)}
