@@ -15,6 +15,7 @@ from .builder import (
     build_post,
     build_prepared,
     prepare_build,
+    run_preview_start,
 )
 from .context import BlogContext, ROOT_STATIC_FILES
 from .metadata import PostRecord, validate_extension_assets, validate_post_output_routes
@@ -355,6 +356,7 @@ def preview(
 ) -> None:
     context = BlogContext.create(root_dir, base_path="")
     prepared = _full_preview_build(context.root_dir)
+    run_preview_start(prepared)
     state = _PreviewState()
     _PreviewRequestHandler.preview_state = state
     handler = functools.partial(_PreviewRequestHandler, directory=str(context.output_dir))

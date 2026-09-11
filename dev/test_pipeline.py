@@ -14,6 +14,7 @@ from typst_blog_core.builder import (  # noqa: E402
     _run_after_html,
     _run_outputs,
     _run_post_build,
+    run_preview_start,
 )
 from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.pipeline import Pipeline, load_pipeline  # noqa: E402
@@ -68,6 +69,9 @@ class PipelineConfigurationTests(unittest.TestCase):
         pipeline.post_build(id="same", run=lambda task: None)
         with self.assertRaisesRegex(ValueError, "duplicate pipeline id"):
             pipeline.after_html(id="same", run=lambda task: None)
+
+        with self.assertRaisesRegex(ValueError, "duplicate pipeline id"):
+            pipeline.preview_start(id="same", run=lambda task: None)
 
     def test_rejects_output_collision_before_running_callback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -196,6 +200,30 @@ class PipelineExecutionTests(unittest.TestCase):
             _run_post_build(pipeline, task)
 
             self.assertEqual(calls, ["/", "preview"])
+
+    def test_preview_start_runs_once_when_explicitly_invoked(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            pipeline = Pipeline()
+            calls: list[str] = []
+            pipeline.preview_start(
+                id="search",
+                run=lambda task: calls.append(task.mode),
+            )
+            prepared = type(
+                "Prepared",
+                (),
+                {
+                    "context": context,
+                    "site": {"title": "Site"},
+                    "active_posts": [],
+                    "pipeline": pipeline,
+                },
+            )()
+
+            run_preview_start(prepared)
+
+            self.assertEqual(calls, ["preview"])
 
 
 if __name__ == "__main__":

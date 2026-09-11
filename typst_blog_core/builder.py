@@ -567,6 +567,18 @@ def _run_post_build(pipeline: Pipeline, task: BuildTask) -> None:
         hook.run(task)
 
 
+def run_preview_start(prepared: PreparedBuild) -> None:
+    task = _build_task(
+        prepared.context,
+        "preview",
+        prepared.site,
+        prepared.active_posts,
+    )
+    for hook in prepared.pipeline.active_preview_start():
+        print(f"Running preview_start: {hook.id}")
+        hook.run(task)
+
+
 def prepare_build(
     root_dir: Path | str | None = None,
     base_path: str | None = None,

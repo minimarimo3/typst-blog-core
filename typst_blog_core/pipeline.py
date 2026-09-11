@@ -132,6 +132,7 @@ class Pipeline:
         self._outputs: list[_OutputSpec] = []
         self._after_html: list[_HookSpec] = []
         self._post_build: list[_HookSpec] = []
+        self._preview_start: list[_HookSpec] = []
         self._ids: set[str] = set()
 
     def post_output(
@@ -175,6 +176,15 @@ class Pipeline:
         modes: Iterable[BuildMode] = ("build",),
     ) -> None:
         self._add_hook(self._post_build, id, run, modes)
+
+    def preview_start(
+        self,
+        *,
+        id: str,
+        run: BuildCallback,
+    ) -> None:
+        """Run once after the initial preview artifact has been built."""
+        self._add_hook(self._preview_start, id, run, ("preview",))
 
     def _claim_id(self, id: str) -> None:
         if not isinstance(id, str) or not HOOK_ID_RE.fullmatch(id):
@@ -299,6 +309,9 @@ class Pipeline:
 
     def active_post_build(self, mode: BuildMode) -> tuple[_HookSpec, ...]:
         return tuple(hook for hook in self._post_build if mode in hook.modes)
+
+    def active_preview_start(self) -> tuple[_HookSpec, ...]:
+        return tuple(self._preview_start)
 
 
 def normalize_modes(modes: Iterable[BuildMode]) -> frozenset[str]:

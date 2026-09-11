@@ -61,10 +61,12 @@ class PreviewTests(unittest.TestCase):
                     return_value=server,
                 ) as server_factory,
                 patch("typst_blog_core.preview.threading.Thread") as thread,
+                patch("typst_blog_core.preview.run_preview_start") as preview_start,
             ):
                 preview(directory)
 
             build.assert_called_once_with(Path(directory).resolve())
+            preview_start.assert_called_once_with(prepared)
             server_factory.assert_called_once_with(("localhost", 8000), ANY)
             thread.return_value.start.assert_called_once_with()
             self.assertEqual(thread.call_args.kwargs["args"][2], prepared)
@@ -87,6 +89,7 @@ class PreviewTests(unittest.TestCase):
                     side_effect=[address_in_use, server],
                 ) as server_factory,
                 patch("typst_blog_core.preview.threading.Thread"),
+                patch("typst_blog_core.preview.run_preview_start"),
             ):
                 preview(directory, host="0.0.0.0", port=9000)
 
@@ -108,6 +111,7 @@ class PreviewTests(unittest.TestCase):
                     "typst_blog_core.preview.http.server.ThreadingHTTPServer",
                     side_effect=permission_error,
                 ) as server_factory,
+                patch("typst_blog_core.preview.run_preview_start"),
             ):
                 with self.assertRaises(OSError) as raised:
                     preview(directory, port=80)

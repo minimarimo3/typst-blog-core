@@ -356,11 +356,13 @@ rebuild and calls `configure(pipeline)`. A site can register:
 - `site_output` for a declared site-wide file
 - `after_html` for each HTML file below `public/`
 - `post_build` after the completed local artifact is available
+- `preview_start` once after the initial preview artifact is available
 
 Outputs run before HTML so their validated metadata can be included in renderer
 data. Output callbacks must create exactly their declared file; route conflicts,
 unsafe paths, callback exceptions, and non-zero subprocess exits fail the build.
-`after_html` and `post_build` hooks run in registration order.
+Hooks of each kind run in registration order. `preview_start` does not run on
+later preview rebuilds, so it does not disable incremental preview.
 
 Extra outputs and `post_build` default to production builds only. `after_html`
 defaults to both production and preview. Each registration can set `modes` to
