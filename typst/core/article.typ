@@ -2,6 +2,7 @@
 #import "shared.typ": export-target, main-font, heading-font, math-font, base-path, calver-key
 #import "article-seo.typ": article-seo-data
 #import "build-data.typ": load-build-data
+#import "github.typ": github-commits-url
 
 /// 記事のメタデータを構築する。
 #let post-meta(
@@ -114,11 +115,7 @@
     image: og-image,
   )
   let source-path = generated.at("source_url_path", default: none)
-  let source-url = if source-path == none or site.github_repo == none or site.github_repo == "" {
-    none
-  } else {
-    site.github_repo.trim("/", at: end) + "/commits/main/" + source-path
-  }
+  let source-url = github-commits-url(site.github_repo, site.github_branch, source-path)
   let outputs = generated.at("outputs", default: ()).map(output => (
     ..output,
     url: base-path + output.path,

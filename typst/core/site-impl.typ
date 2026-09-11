@@ -2,7 +2,7 @@
 ///
 /// - title (str): サイトタイトル（空文字不可）
 /// - description (str): サイト説明文（空文字不可）
-/// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュなし
+/// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュは自動的に除去される
 /// - language (str, dictionary): `"ja"`、または Typst の `text` と同じ `lang` / `region` / `script` を持つ辞書
 /// - theme (dictionary): template側themeが定義する設定。coreは内容を解釈しない
 /// - pagination (dictionary): home / tag の一覧分割設定。各項目は enabled (bool) と per_page (int) を持つ
@@ -19,6 +19,7 @@
 ///   ```
 /// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `links`（`id` / `label` / `url` と省略可能な `icon` を持つ配列）を含む辞書
 /// - github_repo (str, none): GitHub リポジトリの URL（例: `"https://github.com/user/repo"`）。設定すると記事ページに編集履歴リンクが表示される
+/// - github_branch (str): 編集履歴リンクに使う GitHub ブランチ名。省略時は `"main"`
 /// -> dictionary
 #let _site(
   title: none,
@@ -43,6 +44,7 @@
   fonts: none,
   author: none,
   github_repo: none,
+  github_branch: "main",
 ) = {
   let _req = (v, f) => assert(
     type(v) == str and v != "",
@@ -63,11 +65,11 @@
   _req(title,       "title")
   _req(description, "description")
   _req(base_url,    "base_url")
+  let base_url = base_url.trim("/", at: end)
   assert(
     base_url.starts-with("https://") or base_url.starts-with("http://"),
     message: "site.base_url: https:// または http:// で始まる必要があります",
   )
-  assert(not base_url.ends-with("/"), message: "site.base_url: 末尾にスラッシュは不要です")
   let language = if type(language) == str {
     (lang: language, region: none, script: auto)
   } else {
@@ -217,10 +219,14 @@
     github_repo == none or (type(github_repo) == str and (github_repo.starts-with("https://") or github_repo.starts-with("http://"))),
     message: "site.github_repo: none か https:// / http:// で始まる URL 文字列が必要です",
   )
+  assert(
+    type(github_branch) == str and github_branch.trim() != "",
+    message: "site.github_branch: 空でない文字列が必要です",
+  )
 
   (
     title: title, description: description, base_url: base_url, language: language,
     theme: theme, pagination: pagination, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author,
-    github_repo: github_repo,
+    github_repo: github_repo, github_branch: github_branch,
   )
 }

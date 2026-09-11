@@ -27,6 +27,39 @@ from post_factory import make_post_record  # noqa: E402
 
 
 class ThemeBoundaryTests(unittest.TestCase):
+    def test_public_site_api_normalizes_trailing_slashes_in_base_url(self) -> None:
+        for configured_url in (
+            "https://example.com/",
+            "https://example.com/blog///",
+        ):
+            with self.subTest(configured_url=configured_url):
+                with tempfile.TemporaryDirectory() as directory:
+                    blog_root = Path(directory)
+                    (blog_root / "site.typ").write_text(
+                        f'''#import "/vendor/typst-blog-core/typst/site-api.typ" as core-site-api
+#let site = core-site-api.site(
+  title: "Test",
+  description: "Test site",
+  base_url: "{configured_url}",
+  language: "en",
+  fonts: (
+    main: (pdf: "serif", web: none),
+    code: (pdf: "monospace", web: none),
+  ),
+  author: (name: "Test", bio: "", links: ()),
+)
+#metadata(site) <site-meta>
+''',
+                        encoding="utf-8",
+                    )
+                    vendored_core = blog_root / "vendor" / "typst-blog-core"
+                    vendored_core.parent.mkdir()
+                    vendored_core.symlink_to(CORE_DIR, target_is_directory=True)
+
+                    site = load_site_config(BlogContext.create(blog_root))
+
+                self.assertEqual(site["base_url"], configured_url.rstrip("/"))
+
     def test_public_typst_api_exports_renderer_contract_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             blog_root = Path(directory)
