@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -25,6 +27,39 @@ from post_factory import make_post_record  # noqa: E402
 
 
 class ThemeBoundaryTests(unittest.TestCase):
+    def test_public_typst_api_exports_renderer_contract_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            blog_root = Path(directory)
+            (blog_root / "site.typ").write_text(
+                '''#let site = (
+  base_url: "https://example.com",
+  fonts: (main: (pdf: "serif"), code: (pdf: "monospace")),
+)
+''',
+                encoding="utf-8",
+            )
+            vendored_core = blog_root / "vendor" / "typst-blog-core"
+            vendored_core.parent.mkdir()
+            vendored_core.symlink_to(CORE_DIR, target_is_directory=True)
+            result = subprocess.run(
+                [
+                    "typst",
+                    "eval",
+                    'import "vendor/typst-blog-core/typst/api.typ": api-version; api-version',
+                    "--root",
+                    str(blog_root),
+                ],
+                cwd=blog_root,
+                check=False,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+            )
+        if result.returncode != 0:
+            self.fail(result.stderr)
+
+        self.assertEqual(json.loads(result.stdout), 1)
+
     def test_generated_tag_entries_call_template_theme(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)

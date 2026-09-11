@@ -295,6 +295,11 @@ The stable template-facing entry points owned by core are:
   circular import through APIs that consume the completed site configuration
 - `typst_blog_core.api`, the Python command entry point
 
+`typst/api.typ` exports `api-version`, an integer version of the core-to-theme
+renderer and data contract. Compatible additions and fixes keep the same value.
+A release that changes renderer inputs such as `data.post` or `data.seo` must
+increment it and be paired with a theme that declares support for that version.
+
 Files below `typst/core/`, `typst/components/`, and the other Python modules are
 implementation details. A core update may reorganize them without requiring
 changes to an existing user-owned template, provided these public entry points

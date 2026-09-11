@@ -1,5 +1,7 @@
 // Template向けの安定した公開API。
 // core内部のファイル構成は、このmoduleの背後で自由に変更できる。
+#let api-version = 1
+
 #import "core/shared.typ": (
   calver as core-calver,
   calver-display as core-calver-display,
