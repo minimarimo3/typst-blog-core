@@ -1,5 +1,6 @@
 #import "/site.typ": site
 #import "shared.typ": calver-iso-datetime
+#import "language.typ": html-language
 
 #let _article-url(url-slug) = {
   site.base_url + "/" + url-slug + "/"
@@ -43,15 +44,7 @@
 }
 
 #let _site-author-same-as() = {
-  let socials = site.author.at("socials", default: (:))
-  let urls = ()
-  for key in ("x", "misskey", "github") {
-    let url = socials.at(key, default: "")
-    if url != "" {
-      urls.push(url)
-    }
-  }
-  urls
+  site.author.at("links", default: ()).map(link => link.url)
 }
 
 #let _person-json-ld(name) = {
@@ -85,7 +78,7 @@
       "@id": page-url,
     ),
     url: page-url,
-    inLanguage: site.language,
+    inLanguage: html-language(site.language),
   )
 
   if image-url != none and image-url != "" {

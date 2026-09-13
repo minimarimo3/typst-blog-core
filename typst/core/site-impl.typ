@@ -2,11 +2,13 @@
 ///
 /// - title (str): サイトタイトル（空文字不可）
 /// - description (str): サイト説明文（空文字不可）
-/// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュなし
-/// - language (str): サイト言語コード（例: `"ja"`, `"en"`）
-/// - theme (str): テーマ名。英数字・`_`・`-` のみ使用可（例: `"dark"`, `"light"`）
+/// - base_url (str): サイトのベース URL（例: `"https://example.com"`）。末尾スラッシュは自動的に除去される
+/// - language (str, dictionary): `"ja"`、または Typst の `text` と同じ `lang` / `region` / `script` を持つ辞書
+/// - theme (dictionary): template側themeが定義する設定。coreは内容を解釈しない
+/// - pagination (dictionary): home / tag の一覧分割設定。各項目は enabled (bool) と per_page (int) を持つ
 /// - posts_dir (str): 記事ディレクトリ。ブログルートからの相対パス（例: `"posts"`）
 /// - update_policy (str): 更新日の決定方法。`"git"` は記事ディレクトリの Git 履歴、`"manual"` は記事の `update` を使う
+/// - asset_extensions (array): 記事・固定ページのディレクトリから出力へコピーするファイル拡張子。省略時は一般的な画像・動画・音声・フォント・文書形式
 /// - default_og_image (str, none): 記事やページに画像指定がないときに使う既定OGP画像 URL
 /// - fonts (dictionary): フォント設定。`main` と `code` キーが必須で、各々 `pdf` フィールドが必要。```typst
 ///   fonts: (
@@ -15,27 +17,34 @@
 ///     // heading / math / 任意名のフォントも追加可
 ///   )
 ///   ```
-/// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `socials`（`x` / `misskey` / `github` の URL）を含む辞書
-/// - analytics (dictionary): アナリティクス設定。`cloudflare_token`（str | none）を含む辞書
-/// - feedback (dictionary): フィードバック設定。`google_form_url`（str | none）と `entry_id`（str | none）を含む辞書
-/// - share (dictionary): シェアボタン設定。`x`, `misskey`, `copy` の各 bool を含む辞書
+/// - author (dictionary): 著者情報。`name`（必須）, `bio`（str）, `links`（`id` / `label` / `url` と省略可能な `icon` を持つ配列）を含む辞書
 /// - github_repo (str, none): GitHub リポジトリの URL（例: `"https://github.com/user/repo"`）。設定すると記事ページに編集履歴リンクが表示される
+/// - github_branch (str): 編集履歴リンクに使う GitHub ブランチ名。省略時は `"main"`
 /// -> dictionary
 #let _site(
   title: none,
   description: none,
   base_url: none,
   language: none,
-  theme: "dark",
+  theme: (:),
+  pagination: (
+    home: (enabled: false, per_page: 10),
+    tag: (enabled: false, per_page: 10),
+  ),
   posts_dir: ".",
   update_policy: "git",
+  asset_extensions: (
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif",
+    ".mp4", ".webm", ".ogv", ".mov",
+    ".mp3", ".m4a", ".ogg", ".oga", ".wav", ".flac", ".aac",
+    ".woff", ".woff2", ".ttf", ".otf",
+    ".pdf", ".js", ".yaml", ".yml", ".bib", ".txt",
+  ),
   default_og_image: none,
   fonts: none,
   author: none,
-  analytics: (cloudflare_token: none),
-  feedback: (google_form_url: none, entry_id: none),
-  share: none,
   github_repo: none,
+  github_branch: "main",
 ) = {
   let _req = (v, f) => assert(
     type(v) == str and v != "",
@@ -45,29 +54,93 @@
     u == "" or u.starts-with("https://") or u.starts-with("http://"),
     message: "site." + f + ": URL は https:// または http:// で始まる必要があります",
   )
+  let _ascii-letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  let _language-code = (value, lengths) => (
+    type(value) == str
+      and value.len() in lengths
+      and value.clusters().all(character => _ascii-letters.contains(character))
+  )
 
   // 必須文字列
   _req(title,       "title")
   _req(description, "description")
   _req(base_url,    "base_url")
+  let base_url = base_url.trim("/", at: end)
   assert(
     base_url.starts-with("https://") or base_url.starts-with("http://"),
     message: "site.base_url: https:// または http:// で始まる必要があります",
   )
-  assert(not base_url.ends-with("/"), message: "site.base_url: 末尾にスラッシュは不要です")
-  _req(language, "language")
+  let language = if type(language) == str {
+    (lang: language, region: none, script: auto)
+  } else {
+    assert(type(language) == dictionary, message: "site.language: 文字列か辞書が必要です")
+    assert(
+      language.keys().all(key => key in ("lang", "region", "script")),
+      message: "site.language: lang, region, script 以外のキーは使用できません",
+    )
+    (
+      lang: language.at("lang", default: none),
+      region: language.at("region", default: none),
+      script: language.at("script", default: auto),
+    )
+  }
+  assert(
+    _language-code(language.lang, (2, 3)),
+    message: "site.language.lang: 2文字か3文字の ISO 639 言語コードが必要です",
+  )
+  assert(
+    language.region == none or _language-code(language.region, (2,)),
+    message: "site.language.region: none か2文字の ISO 3166-1 alpha-2 コードが必要です",
+  )
+  assert(
+    language.script == auto or _language-code(language.script, (4,)),
+    message: "site.language.script: auto か4文字の OpenType スクリプトタグが必要です",
+  )
+  language = (
+    lang: lower(language.lang),
+    region: if language.region == none { none } else { upper(language.region) },
+    script: if language.script == auto { auto } else { lower(language.script) },
+  )
   assert(default_og_image == none or type(default_og_image) == str, message: "site.default_og_image: none か文字列が必要です")
   _req(posts_dir, "posts_dir")
   assert(update_policy == "git" or update_policy == "manual", message: "site.update_policy: git または manual が必要です")
-
-  // theme（英数字・アンダースコア・ハイフンのみ）
-  assert(type(theme) == str and theme != "", message: "site.theme: 空でない文字列が必要です")
   assert(
-    theme.clusters().all(c =>
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".contains(c)
-    ),
-    message: "site.theme: 英数字・アンダースコア・ハイフンのみ使用可能です",
+    type(asset_extensions) == array and asset_extensions.len() > 0,
+    message: "site.asset_extensions: 空でない配列が必要です",
   )
+  let _asset-extension-characters = _ascii-letters + "0123456789"
+  for (index, extension) in asset_extensions.enumerate() {
+    assert(
+      type(extension) == str
+        and extension.len() > 1
+        and extension.starts-with(".")
+        and extension.slice(1).clusters().all(character => _asset-extension-characters.contains(character)),
+      message: "site.asset_extensions.at(" + str(index) + "): ドットに続けて英数字の拡張子を指定してください",
+    )
+  }
+
+  assert(type(theme) == dictionary, message: "site.theme: theme固有設定の辞書が必要です")
+  assert(type(pagination) == dictionary, message: "site.pagination: 辞書が必要です")
+  assert(
+    pagination.keys().all(key => key in ("home", "tag")),
+    message: "site.pagination: home, tag 以外のキーは使用できません",
+  )
+  let pagination = (
+    home: pagination.at("home", default: (enabled: false, per_page: 10)),
+    tag: pagination.at("tag", default: (enabled: false, per_page: 10)),
+  )
+  for (name, setting) in pagination {
+    assert(type(setting) == dictionary, message: "site.pagination." + name + ": 辞書が必要です")
+    assert(
+      setting.keys().all(key => key in ("enabled", "per_page")),
+      message: "site.pagination." + name + ": enabled, per_page 以外のキーは使用できません",
+    )
+    assert(type(setting.at("enabled", default: none)) == bool, message: "site.pagination." + name + ".enabled: true/false が必要です")
+    assert(
+      type(setting.at("per_page", default: none)) == int and setting.per_page > 0,
+      message: "site.pagination." + name + ".per_page: 1以上の整数が必要です",
+    )
+  }
 
   // fonts（main・code は必須、それぞれ pdf フィールドが必要）
   assert(type(fonts) == dictionary, message: "site.fonts: 辞書が必要です")
@@ -104,36 +177,56 @@
   assert(type(author) == dictionary, message: "site.author: 辞書が必要です")
   _req(author.at("name", default: none), "author.name")
   assert(type(author.at("bio", default: "")) == str, message: "site.author.bio: 文字列が必要です")
-  let _soc = author.at("socials", default: (:))
-  _url(_soc.at("x",       default: ""), "author.socials.x")
-  _url(_soc.at("misskey",  default: ""), "author.socials.misskey")
-  _url(_soc.at("github",   default: ""), "author.socials.github")
-
-  // share
-  assert(type(share) == dictionary, message: "site.share: 辞書が必要です")
-  assert(type(share.at("x",       default: none)) == bool, message: "site.share.x: true/false が必要です")
-  assert(type(share.at("misskey", default: none)) == bool, message: "site.share.misskey: true/false が必要です")
-  assert(type(share.at("copy",    default: none)) == bool, message: "site.share.copy: true/false が必要です")
-
-  // analytics（省略可・設定する場合は文字列）
-  let _cf = analytics.at("cloudflare_token", default: none)
-  assert(_cf == none or type(_cf) == str, message: "site.analytics.cloudflare_token: none か文字列が必要です")
-
-  // feedback（省略可・設定する場合は文字列）
-  let _gf  = feedback.at("google_form_url", default: none)
-  let _eid = feedback.at("entry_id",        default: none)
-  assert(_gf  == none or type(_gf)  == str, message: "site.feedback.google_form_url: none か文字列が必要です")
-  assert(_eid == none or type(_eid) == str, message: "site.feedback.entry_id: none か文字列が必要です")
+  let links = author.at("links", default: ())
+  assert(type(links) == array, message: "site.author.links: 配列が必要です")
+  for (index, link) in links.enumerate() {
+    assert(type(link) == dictionary, message: "site.author.links.at(" + str(index) + "): 辞書が必要です")
+    assert(
+      link.keys().all(key => key in ("id", "label", "url", "icon")),
+      message: "site.author.links.at(" + str(index) + "): id, label, url, icon 以外のキーは使用できません",
+    )
+    let id = link.at("id", default: none)
+    _req(id, "author.links.at(" + str(index) + ").id")
+    assert(
+      id.clusters().all(character => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".contains(character)),
+      message: "site.author.links.at(" + str(index) + ").id: 英数字・アンダースコア・ハイフンのみ使用可能です",
+    )
+    _req(link.at("label", default: none), "author.links.at(" + str(index) + ").label")
+    let url = link.at("url", default: none)
+    assert(type(url) == str and url != "", message: "site.author.links.at(" + str(index) + ").url: 空でないURLが必要です")
+    _url(url, "author.links.at(" + str(index) + ").url")
+    let icon = link.at("icon", default: none)
+    assert(
+      icon == none or (type(icon) == str and icon.trim() != ""),
+      message: "site.author.links.at(" + str(index) + ").icon: 空でない文字列か none が必要です",
+    )
+    if icon != none {
+      let segments = icon.split("/")
+      assert(
+        not icon.starts-with("/")
+          and not icon.contains("\\")
+          and not ("." in segments)
+          and not (".." in segments)
+          and not icon.contains("?")
+          and not icon.contains("#"),
+        message: "site.author.links.at(" + str(index) + ").icon: static/ からの安全な相対パスが必要です",
+      )
+    }
+  }
 
   // github_repo（省略可・設定する場合は URL 文字列）
   assert(
     github_repo == none or (type(github_repo) == str and (github_repo.starts-with("https://") or github_repo.starts-with("http://"))),
     message: "site.github_repo: none か https:// / http:// で始まる URL 文字列が必要です",
   )
+  assert(
+    type(github_branch) == str and github_branch.trim() != "",
+    message: "site.github_branch: 空でない文字列が必要です",
+  )
 
   (
     title: title, description: description, base_url: base_url, language: language,
-    theme: theme, posts_dir: posts_dir, update_policy: update_policy, default_og_image: default_og_image, fonts: fonts, author: author, analytics: analytics,
-    feedback: feedback, share: share, github_repo: github_repo,
+    theme: theme, pagination: pagination, posts_dir: posts_dir, update_policy: update_policy, asset_extensions: asset_extensions, default_og_image: default_og_image, fonts: fonts, author: author,
+    github_repo: github_repo, github_branch: github_branch,
   )
 }

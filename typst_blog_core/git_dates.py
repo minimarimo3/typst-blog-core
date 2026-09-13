@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .context import BlogContext
-from .metadata import make_calver
+from .metadata import make_calver, PostRecord
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,11 @@ def _warn(message: str) -> None:
     print(f"Warning: {message}", file=sys.stderr)
 
 
-def apply_update_policy(context: BlogContext, site: dict, posts: list[dict]) -> None:
+def apply_update_policy(
+    context: BlogContext,
+    site: dict,
+    posts: list[PostRecord],
+) -> None:
     """Resolve post update dates according to the site-level policy.
 
     The Git policy treats the commit that first introduced the post's index.typ
@@ -65,9 +69,9 @@ def apply_update_policy(context: BlogContext, site: dict, posts: list[dict]) -> 
         _warn(f"cannot calculate Git update dates ({exc}); keeping manual update values")
         return
 
-    for post in posts:
-        source_path = post["source_file"].relative_to(context.root_dir)
-        source_dir = post["source_dir"].relative_to(context.root_dir)
+    for index, post in enumerate(posts):
+        source_path = post.source_file.relative_to(context.root_dir)
+        source_dir = post.source_dir.relative_to(context.root_dir)
         try:
             source_commits = _git_log(context, source_path, follow=True)
             directory_commits = _git_log(context, source_dir)
@@ -93,10 +97,13 @@ def apply_update_policy(context: BlogContext, site: dict, posts: list[dict]) -> 
             and commit.timestamp >= initial_commit.timestamp
         ]
         if not update_candidates:
-            post["update"] = None
+            posts[index] = replace(post, update=None)
             continue
 
         latest = max(update_candidates, key=lambda commit: commit.timestamp)
         year, month, day = (int(part) for part in latest.date.split("-"))
         calculated = make_calver(year, month, day)
-        post["update"] = calculated if calculated > post["create"] else None
+        posts[index] = replace(
+            post,
+            update=calculated if calculated > post.create else None,
+        )

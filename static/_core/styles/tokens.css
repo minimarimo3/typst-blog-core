@@ -1,0 +1,36 @@
+/* Public theme tokens. Themes may override these without depending on core class names. */
+
+:root {
+  /* Typography */
+  --font-main: "Noto Serif JP", serif;
+  --font-heading: var(--font-main);
+  --font-code: "Fira Code", monospace;
+
+  /* Page layout */
+  --content-width: 760px;
+  --sidebar-width: 280px;
+  --gap-width: 60px;
+  --container-width: calc(var(--content-width) + var(--gap-width) + var(--sidebar-width));
+
+  /* Post cards */
+  --card-grid-min-width: 240px;
+  --card-grid-gap: 20px;
+  --card-border-radius: 8px;
+  --card-content-padding: 20px;
+  --card-title-size: 1.1rem;
+
+  /* Article headings */
+  --article-title-size: 2.2rem;
+  --article-title-size-mobile: 1.8rem;
+  --article-title-line-height: 1.3;
+  --article-heading-2-size: 1.6rem;
+  --article-heading-3-size: 1.3rem;
+
+  /* Sidebar widgets */
+  --sidebar-widget-gap: 30px;
+  --sidebar-widget-padding: 20px;
+  --sidebar-widget-border-radius: 8px;
+  --sidebar-widget-border-width: 1px;
+  --sidebar-widget-title-size: 1rem;
+  --sidebar-widget-title-gap: 15px;
+}

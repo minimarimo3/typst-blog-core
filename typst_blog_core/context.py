@@ -7,20 +7,6 @@ from pathlib import Path
 
 
 CORE_DIR = Path(__file__).resolve().parent.parent
-STATIC_EXTENSIONS = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".svg",
-    ".webp",
-    ".pdf",
-    ".js",
-    ".yaml",
-    ".yml",
-    ".bib",
-    ".txt",
-}
 ROOT_STATIC_FILES = {
     "CNAME",
     "favicon.ico",
@@ -29,15 +15,17 @@ ROOT_STATIC_FILES = {
     "site.webmanifest",
     "manifest.webmanifest",
 }
+TYPST_VERSION_FILE = CORE_DIR / "typst-version"
 
 
 @dataclass(frozen=True)
 class BlogContext:
     root_dir: Path
+    build_dir: Path
     output_dir: Path
-    generated_posts_file: Path
+    generated_site_data_file: Path
     core_dir: Path
-    core_static_dir: Path
+    theme_static_dir: Path
     user_static_dir: Path
     base_path: str | None = None
 
@@ -48,14 +36,42 @@ class BlogContext:
         base_path: str | None = None,
     ) -> "BlogContext":
         root = Path(root_dir).resolve() if root_dir is not None else Path.cwd().resolve()
+        build_dir = root / ".build"
         return cls(
             root_dir=root,
+            build_dir=build_dir,
             output_dir=root / "public",
-            generated_posts_file=root / "typst" / "generated" / "posts.typ",
+            generated_site_data_file=build_dir / "typst" / "site-data.typ",
             core_dir=CORE_DIR,
-            core_static_dir=CORE_DIR / "static",
+            theme_static_dir=root / "theme" / "static",
             user_static_dir=root / "static",
             base_path=base_path,
+        )
+
+
+def warn_if_typst_version_mismatch() -> None:
+    expected = TYPST_VERSION_FILE.read_text(encoding="utf-8").strip()
+    result = subprocess.run(
+        ["typst", "--version"],
+        check=True,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+    )
+    version_output = result.stdout.strip()
+    prefix = "typst "
+    version_details = version_output.removeprefix(prefix)
+    actual = version_details.split(maxsplit=1)[0] if version_details else ""
+    if not version_output.startswith(prefix) or not actual:
+        print(
+            f"Warning: Could not determine the Typst version from: {version_output!r}",
+            file=sys.stderr,
+        )
+    elif actual != expected:
+        print(
+            "Warning: Typst version mismatch: "
+            f"expected {expected} (typst-version), but found {actual}.",
+            file=sys.stderr,
         )
 
 
