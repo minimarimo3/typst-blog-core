@@ -88,10 +88,6 @@ def create_post(
     site = load_site_metadata(context)
     posts_dir = resolve_posts_dir(context, site)
     slug = validate_post_slug(unicodedata.normalize("NFC", slug))
-    if not title.strip():
-        raise ValueError("title must not be empty")
-    if not description.strip():
-        raise ValueError("description must not be empty")
     normalized_tags = validate_post_tags(tags)
     normalized_extra = validate_post_extra(dict(extra or {}))
     destination = posts_dir / slug

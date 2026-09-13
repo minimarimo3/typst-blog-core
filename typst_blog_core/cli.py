@@ -54,8 +54,12 @@ def _parser(
 
     post_parser = new_subparsers.add_parser("post", help="create a new post")
     post_parser.add_argument("slug", help="post directory name (also the default URL path)")
-    post_parser.add_argument("--title", required=True, help="post title")
-    post_parser.add_argument("--description", required=True, help="short post description")
+    post_parser.add_argument("--title", default="", help="post title (default: empty)")
+    post_parser.add_argument(
+        "--description",
+        default="",
+        help="short post description (default: empty)",
+    )
     post_parser.add_argument(
         "--tag",
         action="append",

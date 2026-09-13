@@ -39,6 +39,24 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         preview.assert_called_once_with(root_dir="blog", host="127.0.0.1", port=9100)
 
+    def test_new_post_defaults_title_and_description_to_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "typst_blog_core.new_post.load_site_metadata",
+                return_value={"posts_dir": "."},
+            ):
+                result = api.main(
+                    ["new", "post", "unfinished"],
+                    root_dir=directory,
+                )
+
+            self.assertEqual(result, 0)
+            source = (Path(directory) / "unfinished" / "index.typ").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn('title: ""', source)
+            self.assertIn('description: ""', source)
+
     def test_custom_new_post_arguments_use_default_template(self) -> None:
         def configure(parser: argparse.ArgumentParser) -> None:
             parser.add_argument("--course", required=True)

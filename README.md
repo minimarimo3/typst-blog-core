@@ -58,8 +58,16 @@ excluding drafts from pages, tag routes, RSS, and sitemap output.
 python3 vendor/typst-blog-core/command.py preview
 ```
 
-Create a minimal post directory and `index.typ` with validated metadata using
-the `new post` command. New posts are drafts unless `--publish` is supplied.
+Create a minimal post directory and `index.typ` using the `new post` command.
+New posts are drafts unless `--publish` is supplied. `--title` and
+`--description` are optional so you can fill them in later in your editor;
+the blog will not build until both values are non-empty.
+
+```sh
+python3 command.py new post my-first-post
+```
+
+You can also fill in the metadata when creating the post:
 
 ```sh
 python3 command.py new post my-first-post \

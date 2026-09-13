@@ -54,6 +54,18 @@ class NewPostTests(unittest.TestCase):
             self.assertIn("create: calver(2026, 7, 19)", source)
             self.assertIn("draft: true", source)
 
+    def test_creates_unfinished_draft_with_empty_text_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            index_file = create_post(
+                root_dir=directory,
+                slug="unfinished",
+                title="",
+                description="",
+            )
+            source = index_file.read_text(encoding="utf-8")
+            self.assertIn('title: ""', source)
+            self.assertIn('description: ""', source)
+
     def test_publish_flag_creates_published_post(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             index_file = create_post(
