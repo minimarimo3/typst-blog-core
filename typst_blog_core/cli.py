@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .builder import build
+from .context import warn_if_typst_version_mismatch
 from .new_page import PageTemplate, create_page
 from .new_post import PostTemplate, create_post, parse_post_date
 from .preview import preview
@@ -132,8 +133,10 @@ def main(
     command = args.command or "build"
     try:
         if command == "build":
+            warn_if_typst_version_mismatch()
             build(root_dir=root_dir)
         elif command == "preview":
+            warn_if_typst_version_mismatch()
             preview(root_dir=root_dir, host=args.host, port=args.port)
         elif command == "new":
             if args.content_type == "post":

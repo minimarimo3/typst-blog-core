@@ -15,6 +15,7 @@ ROOT_STATIC_FILES = {
     "site.webmanifest",
     "manifest.webmanifest",
 }
+TYPST_VERSION_FILE = CORE_DIR / "typst-version"
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,32 @@ class BlogContext:
             theme_static_dir=root / "theme" / "static",
             user_static_dir=root / "static",
             base_path=base_path,
+        )
+
+
+def warn_if_typst_version_mismatch() -> None:
+    expected = TYPST_VERSION_FILE.read_text(encoding="utf-8").strip()
+    result = subprocess.run(
+        ["typst", "--version"],
+        check=True,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+    )
+    version_output = result.stdout.strip()
+    prefix = "typst "
+    version_details = version_output.removeprefix(prefix)
+    actual = version_details.split(maxsplit=1)[0] if version_details else ""
+    if not version_output.startswith(prefix) or not actual:
+        print(
+            f"Warning: Could not determine the Typst version from: {version_output!r}",
+            file=sys.stderr,
+        )
+    elif actual != expected:
+        print(
+            "Warning: Typst version mismatch: "
+            f"expected {expected} (typst-version), but found {actual}.",
+            file=sys.stderr,
         )
 
 
