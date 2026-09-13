@@ -163,6 +163,26 @@ class PermalinkTests(unittest.TestCase):
             self.assertIn('href="/blog/new/path/"', redirect)
             self.assertIn("location.search + location.hash", redirect)
 
+    def test_alias_redirect_uses_complete_bcp47_language_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            post = make_post_record(
+                context.root_dir,
+                aliases=("old/path",),
+            )
+            generate_alias_redirects(
+                context,
+                {
+                    "base_url": "https://example.com",
+                    "language": {"lang": "zh", "script": "hani", "region": "TW"},
+                },
+                [post],
+            )
+            redirect = (context.output_dir / "old/path/index.html").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn('<html lang="zh-Hani-TW">', redirect)
+
 
 class TagSlugTests(unittest.TestCase):
     def test_preserves_simple_existing_tags(self) -> None:

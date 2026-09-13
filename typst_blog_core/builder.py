@@ -191,6 +191,21 @@ def validate_core_asset_namespace(context: BlogContext) -> None:
             raise ValueError(f"{source_dir}/_core is reserved for core assets")
 
 
+def html_language_tag(language: str | dict) -> str:
+    """Return the normalized site language as a complete BCP 47 tag."""
+    if isinstance(language, str):
+        return language
+
+    tag = language["lang"]
+    script = language.get("script")
+    if script and script != "auto":
+        tag += f"-{script.title()}"
+    region = language.get("region")
+    if region:
+        tag += f"-{region.upper()}"
+    return tag
+
+
 def generate_alias_redirects(
     context: BlogContext,
     site: dict,
@@ -200,8 +215,7 @@ def generate_alias_redirects(
     base_path = (
         context.base_path if context.base_path is not None else published_base_path
     )
-    language = site["language"]
-    html_language = language if isinstance(language, str) else language["lang"]
+    html_language = html_language_tag(site["language"])
     for item in content:
         if isinstance(item, PostRecord):
             aliases = item.aliases
