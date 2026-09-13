@@ -7,9 +7,9 @@
 }
 
 .article-title {
-  font-size: 2.2rem;
+  font-size: var(--article-title-size);
   margin: 0 0 15px 0;
-  line-height: 1.3;
+  line-height: var(--article-title-line-height);
 }
 
 .article-meta {
@@ -98,14 +98,14 @@ a.tag:hover {
 .article-body h2 {
   margin-top: 2.5em;
   margin-bottom: 1em;
-  font-size: 1.6rem;
+  font-size: var(--article-heading-2-size);
   border-bottom: 2px solid var(--accent-color);
   padding-bottom: 5px;
 }
 
 .article-body h3 {
   margin-top: 2em;
-  font-size: 1.3rem;
+  font-size: var(--article-heading-3-size);
   border-left: 4px solid var(--accent-color);
   padding-left: 10px;
 }
@@ -528,7 +528,7 @@ tbody tr:last-child td {
 
 @media (max-width: 900px) {
   .article-title {
-    font-size: 1.8rem;
+    font-size: var(--article-title-size-mobile);
   }
 
   .article-end-divider-desktop {

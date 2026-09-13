@@ -67,6 +67,7 @@ class ComponentIntegrationTests(unittest.TestCase):
                 self.assertTrue(dom.matching(tag="math"))
                 self.assertTrue(dom.matching(cls="responsive-toc"))
                 styles = [a["href"] for a in dom.matching(tag="link") if a.get("rel") == "stylesheet"]
+                self.assertLess(styles.index("/blog/_core/styles/tokens.css"), styles.index("/blog/_core/styles/base.css"))
                 self.assertLess(styles.index("/blog/_core/styles/components.css"), styles.index("/blog/styles/theme.css"))
                 self.assertIn("/blog/color-schemes/test.css", styles)
                 self.assertTrue(any(a.get("src") == "/blog/_core/scripts/main.js" for a in dom.matching(tag="script")))
@@ -75,6 +76,12 @@ class ComponentIntegrationTests(unittest.TestCase):
         for path in ("index.html", "tags/Test/index.html", "tags/index.html", "404.html"):
             self.assertTrue(Elements(self.read(path)).matching(tag="main"))
         self.assertTrue((self.root / "public/_core/scripts/search.js").is_file())
+        tokens = self.read("_core/styles/tokens.css")
+        self.assertIn("--card-grid-gap: 20px", tokens)
+        self.assertIn("--article-title-size: 2.2rem", tokens)
+        self.assertIn("--sidebar-widget-padding: 20px", tokens)
+        self.assertIn("gap: var(--card-grid-gap)", self.read("_core/styles/components.css"))
+        self.assertIn("font-size: var(--article-title-size)", self.read("_core/styles/article.css"))
         self.assertIn("19px", self.read("styles/theme.css"))
         license_notice = self.read("third-party-licenses.txt")
         self.assertIn("CC BY-SA 4.0", license_notice)

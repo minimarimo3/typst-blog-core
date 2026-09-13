@@ -1,15 +1,5 @@
 /* Foundations and global element defaults. */
 
-:root {
-  --font-main:    "Noto Serif JP", serif;
-  --font-heading: var(--font-main);
-  --font-code:    "Fira Code", monospace;
-  --content-width: 760px;
-  --sidebar-width: 280px;
-  --gap-width: 60px;
-  --container-width: calc(var(--content-width) + var(--gap-width) + var(--sidebar-width));
-}
-
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
