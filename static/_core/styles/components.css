@@ -428,6 +428,15 @@
   margin-top: 0.5em;
 }
 
+.widget-meta-link {
+  margin: 0.75em 0 0;
+  font-size: 0.75rem;
+}
+
+.widget-meta-link a {
+  color: var(--text-muted);
+}
+
 .toc-inline-slot:empty,
 .toc-desktop-slot:empty {
   display: none;

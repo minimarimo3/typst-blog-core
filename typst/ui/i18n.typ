@@ -48,6 +48,7 @@
     previous_page: "← 前へ",
     next_page: "次へ →",
     page: "ページ",
+    third_party_licenses: "第三者ライセンス",
   ),
   en: (
     skip_to_main_content: "Skip to main content",
@@ -96,6 +97,7 @@
     previous_page: "← Previous",
     next_page: "Next →",
     page: "Page",
+    third_party_licenses: "Third-party licenses",
   ),
   ko: (
     skip_to_main_content: "본문으로 건너뛰기",
@@ -144,6 +146,7 @@
     previous_page: "← 이전",
     next_page: "다음 →",
     page: "페이지",
+    third_party_licenses: "서드파티 라이선스",
   ),
   "zh-CN": (
     skip_to_main_content: "跳到正文",
@@ -192,6 +195,7 @@
     previous_page: "← 上一页",
     next_page: "下一页 →",
     page: "第",
+    third_party_licenses: "第三方许可证",
   ),
   "zh-TW": (
     skip_to_main_content: "跳到主要內容",
@@ -240,6 +244,7 @@
     previous_page: "← 上一頁",
     next_page: "下一頁 →",
     page: "第",
+    third_party_licenses: "第三方授權",
   ),
 )
 

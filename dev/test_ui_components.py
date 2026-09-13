@@ -76,6 +76,13 @@ class ComponentIntegrationTests(unittest.TestCase):
             self.assertTrue(Elements(self.read(path)).matching(tag="main"))
         self.assertTrue((self.root / "public/_core/scripts/search.js").is_file())
         self.assertIn("19px", self.read("styles/theme.css"))
+        license_notice = self.read("third-party-licenses.txt")
+        self.assertIn("CC BY-SA 4.0", license_notice)
+        self.assertIn("misskey-hub.net/ja/brand-assets", license_notice)
+        home = self.read("index.html")
+        self.assertIn('class="widget-meta-link"', home)
+        self.assertIn('href="/blog/third-party-licenses.txt"', home)
+        self.assertNotIn('class="site-footer"', home)
 
     def test_composition_order_and_direct_html_extension_are_preserved(self):
         composition = self.root / "theme/composition.typ"
@@ -136,6 +143,8 @@ class CoreAssetTests(unittest.TestCase):
             output = context.output_dir / "_core/scripts/search.js"
             expected = (CORE_DIR / "static/_core/scripts/search.js").read_bytes()
             self.assertEqual(output.read_bytes(), expected)
+            notice = context.output_dir / "third-party-licenses.txt"
+            self.assertIn("CC BY-SA 4.0", notice.read_text(encoding="utf-8"))
             output.write_text("stale")
             prepared = SimpleNamespace(context=context, posts=[], pages=[])
             (context.root_dir / "extensions.typ").write_text("#metadata(()) <extensions-meta>\n")

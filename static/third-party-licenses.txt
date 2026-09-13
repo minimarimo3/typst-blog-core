@@ -1,0 +1,14 @@
+Third-party licenses
+====================
+
+Misskey monochrome icon
+-----------------------
+Asset: Misskey monochrome icon (misskey_mi_bi.svg)
+Copyright: syuilo and Misskey Project
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+License: https://creativecommons.org/licenses/by-sa/4.0/
+Source: https://misskey-hub.net/ja/brand-assets/
+Upstream SVG: https://github.com/misskey-dev/misskey-hub-next/blob/master/assets/svg/misskey_mi_bi.svg
+
+The SVG is embedded inline for the built-in Misskey author icon. Its path geometry is unchanged.
+This asset is not covered by the MIT License that applies to typst-blog-core.
