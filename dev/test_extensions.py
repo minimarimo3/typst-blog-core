@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -9,45 +8,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 CORE_DIR = Path(__file__).resolve().parents[1]
-DEV_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(CORE_DIR))
 
 from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.metadata import validate_extension_assets  # noqa: E402
-
-
-def evaluate(
-    source: str, *, expect_success: bool = True
-) -> subprocess.CompletedProcess[str]:
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".typ", dir=DEV_DIR, encoding="utf-8"
-    ) as source_file:
-        source_file.write(source)
-        source_file.flush()
-        result = subprocess.run(
-            [
-                "typst",
-                "eval",
-                "query(<result>).map(it => it.value)",
-                "--in",
-                source_file.name,
-                "--root",
-                str(CORE_DIR),
-            ],
-            check=False,
-            text=True,
-            encoding="utf-8",
-            capture_output=True,
-        )
-    if expect_success and result.returncode != 0:
-        raise AssertionError(result.stderr)
-    return result
+from typst_fixture import run_typst  # noqa: E402
 
 
 class ExtensionTests(unittest.TestCase):
     def test_collects_local_and_https_assets_in_registration_order(self) -> None:
-        result = evaluate(
-            '''#import "../typst/core/extensions.typ": extension, extension-assets
+        result = run_typst(
+            '''#import "/vendor/typst-blog-core/typst/api.typ": extension, extension-assets
 #let extensions = (
   extension("alerts", styles: ("extensions/alerts.css",)),
   extension(
@@ -68,8 +39,8 @@ class ExtensionTests(unittest.TestCase):
         )
 
     def test_duplicate_names_are_rejected(self) -> None:
-        result = evaluate(
-            '''#import "../typst/core/extensions.typ": extension, extension-assets
+        result = run_typst(
+            '''#import "/vendor/typst-blog-core/typst/api.typ": extension, extension-assets
 #let extensions = (extension("same"), extension("same"))
 #metadata(extension-assets(extensions)) <result>
 ''',
@@ -79,8 +50,8 @@ class ExtensionTests(unittest.TestCase):
         self.assertIn("拡張名 same が重複", result.stderr)
 
     def test_parent_segments_are_rejected(self) -> None:
-        result = evaluate(
-            '''#import "../typst/core/extensions.typ": extension
+        result = run_typst(
+            '''#import "/vendor/typst-blog-core/typst/api.typ": extension
 #metadata(extension("unsafe", scripts: ("../outside.js",))) <result>
 ''',
             expect_success=False,

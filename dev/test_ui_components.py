@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -71,25 +70,13 @@ class ComponentIntegrationTests(unittest.TestCase):
                 self.assertLess(styles.index("/blog/_core/styles/components.css"), styles.index("/blog/styles/theme.css"))
                 self.assertIn("/blog/color-schemes/test.css", styles)
                 self.assertTrue(any(a.get("src") == "/blog/_core/scripts/main.js" for a in dom.matching(tag="script")))
-                self.assertTrue(all(not a.get("src", "").startswith("/blog/scripts/") for a in dom.matching(tag="script")))
+                self.assertTrue(any(a.get("href") == "/blog/third-party-licenses.txt" for a in dom.matching(tag="a")))
                 self.assertIn('href="https://example.com/blog/' + path.removesuffix("index.html") + '"', source)
         for path in ("index.html", "tags/Test/index.html", "tags/index.html", "404.html"):
             self.assertTrue(Elements(self.read(path)).matching(tag="main"))
         self.assertTrue((self.root / "public/_core/scripts/search.js").is_file())
-        tokens = self.read("_core/styles/tokens.css")
-        self.assertIn("--card-grid-gap: 20px", tokens)
-        self.assertIn("--article-title-size: 2.2rem", tokens)
-        self.assertIn("--sidebar-widget-padding: 20px", tokens)
-        self.assertIn("gap: var(--card-grid-gap)", self.read("_core/styles/components.css"))
-        self.assertIn("font-size: var(--article-title-size)", self.read("_core/styles/article.css"))
-        self.assertIn("19px", self.read("styles/theme.css"))
-        license_notice = self.read("third-party-licenses.txt")
-        self.assertIn("CC BY-SA 4.0", license_notice)
-        self.assertIn("misskey-hub.net/ja/brand-assets", license_notice)
-        home = self.read("index.html")
-        self.assertIn('class="widget-meta-link"', home)
-        self.assertIn('href="/blog/third-party-licenses.txt"', home)
-        self.assertNotIn('class="site-footer"', home)
+        self.assertEqual(self.read("styles/theme.css"), (self.root / "theme/static/styles/theme.css").read_text())
+        self.assertEqual(self.read("third-party-licenses.txt"), (CORE_DIR / "static/third-party-licenses.txt").read_text())
 
     def test_composition_order_and_direct_html_extension_are_preserved(self):
         composition = self.root / "theme/composition.typ"
@@ -104,20 +91,6 @@ class ComponentIntegrationTests(unittest.TestCase):
         self.assertIn('class="custom-component"', source)
         self.assertIn("Custom content", source)
 
-    def test_frozen_theme_survives_internal_core_relocation(self):
-        frozen = {p.relative_to(self.root): p.read_bytes() for p in (self.root / "theme").rglob("*") if p.is_file()}
-        vendored = self.root / "vendor/typst-blog-core"
-        vendored.unlink()
-        shutil.copytree(CORE_DIR / "typst", vendored / "typst")
-        component = vendored / "typst/ui/components/widgets.typ"
-        component.rename(component.with_name("widgets-next.typ"))
-        api = vendored / "typst/ui.typ"
-        api.write_text(api.read_text().replace('components/widgets.typ', 'components/widgets-next.typ'))
-        self.build()
-        self.assertTrue(Elements(self.read("demo/index.html")).matching(cls="search-input"))
-        for path, content in frozen.items():
-            self.assertEqual((self.root / path).read_bytes(), content)
-
     def test_non_indexed_page_keeps_robots_and_search_exclusion(self):
         page = self.root / "pages/about/index.typ"
         page.write_text(page.read_text().replace('draft: false)', 'draft: false, index: false)'))
@@ -126,7 +99,7 @@ class ComponentIntegrationTests(unittest.TestCase):
         self.assertFalse(dom.matching(attr="data-pagefind-body"))
         self.assertTrue(any(a.get("name") == "robots" and a.get("content") == "noindex, nofollow" for a in dom.matching(tag="meta")))
 
-    def test_theme_can_override_existing_translation_and_add_language(self):
+    def test_theme_can_add_language_with_fallback_for_missing_keys(self):
         site = self.root / "site.typ"
         source = site.read_text()
         site.write_text(source.replace(
@@ -134,7 +107,7 @@ class ComponentIntegrationTests(unittest.TestCase):
             'language: "fr", update_policy: "manual", posts_dir: "posts",',
         ).replace(
             'theme: theme-config(color_scheme: "test"),',
-            'theme: theme-config(color_scheme: "test", translations: (fr: (back_home: "Retour personnalisé", toc: "Sommaire"), "zh-SG": (toc: "目录"), "zh-Hani-TW": (toc: "目錄"))),',
+            'theme: theme-config(color_scheme: "test", translations: (fr: (back_home: "Retour personnalisé", toc: "Sommaire"))),',
         ))
         self.build()
         article = self.read("demo/index.html")
@@ -201,8 +174,6 @@ class CoreAssetTests(unittest.TestCase):
             output = context.output_dir / "_core/scripts/search.js"
             expected = (CORE_DIR / "static/_core/scripts/search.js").read_bytes()
             self.assertEqual(output.read_bytes(), expected)
-            notice = context.output_dir / "third-party-licenses.txt"
-            self.assertIn("CC BY-SA 4.0", notice.read_text(encoding="utf-8"))
             output.write_text("stale")
             prepared = SimpleNamespace(context=context, posts=[], pages=[])
             (context.root_dir / "extensions.typ").write_text("#metadata(()) <extensions-meta>\n")

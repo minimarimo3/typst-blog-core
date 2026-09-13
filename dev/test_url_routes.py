@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -30,6 +29,7 @@ from typst_blog_core.metadata import (  # noqa: E402
     write_generated_site_data,
 )
 from post_factory import make_post_record  # noqa: E402
+from typst_fixture import create_config_blog, run_typst  # noqa: E402
 
 
 class PostSlugTests(unittest.TestCase):
@@ -234,196 +234,77 @@ class PostExtraTests(unittest.TestCase):
 
 
 class GeneratedRouteDataTests(unittest.TestCase):
-    def test_empty_site_uses_empty_typst_dictionaries(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            write_generated_site_data(context, [], {})
-            self.assertEqual(
-                context.generated_site_data_file.read_text(encoding="utf-8"),
-                "#let posts = (:)\n\n#let pages = (:)\n\n"
-                "#let tag-slugs = (:)\n\n#let site-outputs = ()\n",
-            )
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.context = BlogContext.create(directory.name)
+        create_config_blog(self.context.root_dir)
 
-    def test_update_date_uses_calver_data_accepted_by_article_helpers(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            source = context.root_dir / "post" / "index.typ"
-            source.parent.mkdir()
-            source.write_text("post", encoding="utf-8")
-            write_generated_site_data(
-                context,
-                [
-                    make_post_record(
-                        context.root_dir,
-                        slug="post",
-                        url_slug="post",
-                        create=make_calver(2026, 1, 1),
-                        update=make_calver(2026, 3, 4),
-                        source_file=source,
-                    )
-                ],
-                {},
-            )
-            generated = context.generated_site_data_file.read_text(encoding="utf-8")
-            self.assertIn(
-                "update: (year: 2026, month: 3, day: 4, patch: 0)", generated
-            )
+    def read_data(self) -> dict:
+        result = run_typst(
+            '#import "/vendor/typst-blog-core/typst/api.typ" as core\n'
+            '#let data = core.load-build-data()\n'
+            '#metadata(data) <result>\n',
+            root=self.context.root_dir,
+        )
+        return json.loads(result.stdout)[0]
 
-    def test_article_metadata_is_written_to_site_data(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            post = make_post_record(
-                context.root_dir,
-                authors=("Ada", "Grace"),
-                abstract="Summary",
-                og_image="/images/card.png",
-            )
+    def test_empty_site_data_is_readable_by_typst(self) -> None:
+        write_generated_site_data(self.context, [], {})
+        self.assertEqual(self.read_data(), {
+            "posts": {}, "pages": {}, "tag-slugs": {}, "site-outputs": [],
+        })
 
-            write_generated_site_data(context, [post], {})
+    def test_metadata_and_outputs_round_trip_through_typst(self) -> None:
+        extra = {
+            "course": {"id": "Typst入門", "lesson": 2},
+            "featured": True,
+            "note": 'first "line"\nsecond line',
+        }
+        post = make_post_record(
+            self.context.root_dir, authors=("Ada", "Grace"), abstract="Summary",
+            og_image="/images/card.png", update=make_calver(2026, 3, 4), extra=extra,
+        )
+        output = {"id": "pdf", "label": "PDF", "media_type": "application/pdf", "path": "/hello/article.pdf"}
+        page = {"slug": "about", "url_slug": "about", "draft": False, "index": True, "extra": {"layout": "wide"}}
+        write_generated_site_data(
+            self.context, [post], {"Typst": "Typst"},
+            post_outputs={"hello": [output]}, site_outputs=[output], pages=[page],
+        )
+        data = self.read_data()
+        generated = data["posts"]["hello"]
+        for key, expected in {
+            "authors": ["Ada", "Grace"], "abstract": "Summary",
+            "og-image": "/images/card.png", "extra": extra,
+        }.items():
+            with self.subTest(field=key):
+                self.assertEqual(generated[key], expected)
+        expected_output = {"id": "pdf", "label": "PDF", "media-type": "application/pdf", "path": "/hello/article.pdf"}
+        self.assertEqual(generated["outputs"], [expected_output])
+        self.assertEqual(data["site-outputs"], [expected_output])
+        self.assertEqual(data["tag-slugs"], {"Typst": "Typst"})
+        self.assertEqual(data["pages"]["about"], {
+            "url-slug": "about", "draft": False, "index": True, "extra": {"layout": "wide"},
+        })
+        result = run_typst(
+            '#import "/vendor/typst-blog-core/typst/api.typ" as core\n'
+            '#metadata(core.calver-display(core.load-build-data().posts.at("hello").update)) <result>',
+            root=self.context.root_dir,
+        )
+        self.assertEqual(json.loads(result.stdout), ["2026.03.04"])
 
-            generated = context.generated_site_data_file.read_text(encoding="utf-8")
-            self.assertIn(
-                'authors: json(bytes("[\\\"Ada\\\",\\\"Grace\\\"]"))',
-                generated,
-            )
-            self.assertIn('abstract: json(bytes("\\\"Summary\\\""))', generated)
-            self.assertIn('og-image: "/images/card.png"', generated)
-
-            result = subprocess.run(
-                [
-                    "typst",
-                    "eval",
-                    "--format",
-                    "json",
-                    '{ import "/.build/typst/site-data.typ": posts; '
-                    'let post = posts.at("hello"); '
-                    '(authors: post.authors, abstract: post.abstract, '
-                    'og-image: post.at("og-image")) }',
-                    "--root",
-                    str(context.root_dir),
-                ],
-                check=True,
-                text=True,
-                encoding="utf-8",
-                capture_output=True,
-            )
-            self.assertEqual(
-                json.loads(result.stdout),
-                {
-                    "authors": ["Ada", "Grace"],
-                    "abstract": "Summary",
-                    "og-image": "/images/card.png",
-                },
-            )
-
-    def test_extra_outputs_are_written_to_private_build_data(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            source = context.root_dir / "post" / "index.typ"
-            source.parent.mkdir()
-            source.write_text("post", encoding="utf-8")
-            post = make_post_record(
-                context.root_dir,
-                slug="post",
-                url_slug="post",
-                create=make_calver(2026, 1, 1),
-                source_file=source,
-            )
-            write_generated_site_data(
-                context,
-                [post],
-                {},
-                post_outputs={
-                    "post": [
-                        {
-                            "id": "pdf",
-                            "label": "PDF",
-                            "media_type": "application/pdf",
-                            "path": "/post/article.pdf",
-                        }
-                    ]
-                },
-            )
-
-            generated = context.generated_site_data_file.read_text(encoding="utf-8")
-            self.assertIn('#let posts = (', generated)
-            self.assertIn('id: "pdf"', generated)
-            self.assertIn('media-type: "application/pdf"', generated)
-            self.assertIn('path: "/post/article.pdf"', generated)
-
-    def test_extra_round_trips_through_generated_typst_data(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            source = context.root_dir / "post" / "index.typ"
-            source.parent.mkdir()
-            source.write_text("post", encoding="utf-8")
-            extra = {
-                "course": {"id": "Typst入門", "lesson": 2},
-                "featured": True,
-                "note": "first line\nsecond line",
-            }
-            write_generated_site_data(
-                context,
-                [
-                    make_post_record(
-                        context.root_dir,
-                        slug="post",
-                        url_slug="post",
-                        create=make_calver(2026, 1, 1),
-                        extra=extra,
-                        source_file=source,
-                    )
-                ],
-                {},
-            )
-
-            result = subprocess.run(
-                [
-                    "typst",
-                    "eval",
-                    "--format",
-                    "json",
-                    '{ import "/.build/typst/site-data.typ": posts; posts.at("post").extra }',
-                    "--root",
-                    str(context.root_dir),
-                ],
-                check=True,
-                text=True,
-                encoding="utf-8",
-                capture_output=True,
-            )
-            self.assertEqual(json.loads(result.stdout), extra)
-
-    def test_drafts_are_only_generated_for_preview(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            source = context.root_dir / "draft-post" / "index.typ"
-            source.parent.mkdir()
-            source.write_text("draft", encoding="utf-8")
-            draft = make_post_record(
-                context.root_dir,
-                slug="draft-post",
-                url_slug="draft-post",
-                title="Draft Post",
-                create=make_calver(2026, 7, 19),
-                tags=("Draft",),
-                draft=True,
-                source_file=source,
-            )
-
-            write_generated_site_data(context, [draft], {"Draft": "Draft"})
-            published = context.generated_site_data_file.read_text(encoding="utf-8")
-            self.assertNotIn('"draft-post"', published)
-
-            write_generated_site_data(
-                context,
-                [draft],
-                {"Draft": "Draft"},
-                include_drafts=True,
-            )
-            preview = context.generated_site_data_file.read_text(encoding="utf-8")
-            self.assertIn('"draft-post"', preview)
-            self.assertIn("draft: true", preview)
+    def test_draft_posts_and_pages_are_only_generated_for_preview(self) -> None:
+        draft = make_post_record(self.context.root_dir, slug="draft-post", draft=True)
+        page = {"slug": "draft-page", "url_slug": "draft-page", "draft": True, "index": True, "extra": {}}
+        for preview in (False, True):
+            with self.subTest(preview=preview):
+                write_generated_site_data(self.context, [draft], {}, pages=[page], include_drafts=preview)
+                data = self.read_data()
+                self.assertEqual(set(data["posts"]), {"draft-post"} if preview else set())
+                self.assertEqual(set(data["pages"]), {"draft-page"} if preview else set())
+                if preview:
+                    self.assertTrue(data["posts"]["draft-post"]["draft"])
+                    self.assertTrue(data["pages"]["draft-page"]["draft"])
 
 
 class PostsDirectoryTests(unittest.TestCase):

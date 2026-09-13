@@ -16,7 +16,6 @@ from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.metadata import (  # noqa: E402
     collect_pages,
     validate_content_route_collisions,
-    write_generated_site_data,
 )
 from typst_blog_core.new_page import (  # noqa: E402
     PageTemplateContext,
@@ -70,30 +69,6 @@ class PageMetadataTests(unittest.TestCase):
             second = make_post_record(root, slug="second", route_path="second")
             with self.assertRaisesRegex(ValueError, "content URL collision"):
                 validate_content_route_collisions([first, second], [])
-
-    def test_generated_data_contains_pages(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            write_generated_site_data(
-                context,
-                [],
-                {},
-                pages=[
-                    {
-                        "slug": "about",
-                        "route_path": "about",
-                        "url_slug": "about",
-                        "aliases": (),
-                        "draft": False,
-                        "index": True,
-                        "extra": {"layout": "wide"},
-                    }
-                ],
-            )
-            generated = context.generated_site_data_file.read_text(encoding="utf-8")
-            self.assertIn('#let pages = (', generated)
-            self.assertIn('"about": (', generated)
-            self.assertIn('index: true', generated)
 
 
 class NewPageTests(unittest.TestCase):

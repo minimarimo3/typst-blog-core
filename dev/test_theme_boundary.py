@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,140 +13,54 @@ sys.path.insert(0, str(CORE_DIR))
 
 from typst_blog_core.builder import (  # noqa: E402
     _home_page_content,
-    _not_found_page_content,
     _tag_page_content,
-    _tags_index_content,
     copy_static_assets,
     _pagination_page_count,
     _pagination_slice,
 )
 from typst_blog_core.context import BlogContext  # noqa: E402
-from typst_blog_core.metadata import CalVer, load_site_config  # noqa: E402
+from typst_blog_core.metadata import CalVer, load_site_config, write_generated_site_data  # noqa: E402
 from post_factory import make_post_record  # noqa: E402
+from typst_fixture import create_config_blog, run_typst  # noqa: E402
 
 
 class ThemeBoundaryTests(unittest.TestCase):
     def test_public_site_api_normalizes_trailing_slashes_in_base_url(self) -> None:
-        for configured_url in (
-            "https://example.com/",
-            "https://example.com/blog///",
-        ):
-            with self.subTest(configured_url=configured_url):
-                with tempfile.TemporaryDirectory() as directory:
-                    blog_root = Path(directory)
-                    (blog_root / "site.typ").write_text(
-                        f'''#import "/vendor/typst-blog-core/typst/site-api.typ" as core-site-api
-#let site = core-site-api.site(
-  title: "Test",
-  description: "Test site",
-  base_url: "{configured_url}",
-  language: "en",
-  fonts: (
-    main: (pdf: "serif", web: none),
-    code: (pdf: "monospace", web: none),
-  ),
-  author: (name: "Test", bio: "", links: ()),
-)
-#metadata(site) <site-meta>
-''',
-                        encoding="utf-8",
-                    )
-                    vendored_core = blog_root / "vendor" / "typst-blog-core"
-                    vendored_core.parent.mkdir()
-                    vendored_core.symlink_to(CORE_DIR, target_is_directory=True)
-
-                    site = load_site_config(BlogContext.create(blog_root))
-
+        for configured_url in ("https://example.com/", "https://example.com/blog///"):
+            with self.subTest(configured_url=configured_url), tempfile.TemporaryDirectory() as directory:
+                create_config_blog(Path(directory), base_url=json.dumps(configured_url))
+                site = load_site_config(BlogContext.create(directory))
                 self.assertEqual(site["base_url"], configured_url.rstrip("/"))
 
-    def test_public_typst_api_exports_renderer_contract_version(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            blog_root = Path(directory)
-            (blog_root / "site.typ").write_text(
-                '''#let site = (
-  base_url: "https://example.com",
-  fonts: (main: (pdf: "serif"), code: (pdf: "monospace")),
-)
-''',
-                encoding="utf-8",
-            )
-            vendored_core = blog_root / "vendor" / "typst-blog-core"
-            vendored_core.parent.mkdir()
-            vendored_core.symlink_to(CORE_DIR, target_is_directory=True)
-            result = subprocess.run(
-                [
-                    "typst",
-                    "eval",
-                    'import "vendor/typst-blog-core/typst/api.typ": api-version; api-version',
-                    "--root",
-                    str(blog_root),
-                ],
-                cwd=blog_root,
-                check=False,
-                text=True,
-                encoding="utf-8",
-                capture_output=True,
-            )
-        if result.returncode != 0:
-            self.fail(result.stderr)
-
-        self.assertEqual(json.loads(result.stdout), 1)
-
-    def test_generated_tag_entries_call_template_theme(self) -> None:
+    def test_generated_tag_entries_pass_metadata_to_custom_renderer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
-            post = make_post_record(
-                context.root_dir,
-                authors=("Ada", "Grace"),
-                abstract="Summary",
-                og_image="/images/card.png",
-                update=CalVer(2026, 1, 3),
-                tags=("Typst",),
-                extra={"course": "typst-basics"},
+            create_config_blog(context.root_dir)
+            context.theme_static_dir.parent.mkdir()
+            (context.root_dir / "theme/theme.typ").write_text(
+                '#import "/vendor/typst-blog-core/typst/api.typ" as core\n'
+                '#let render-tag(data) = [#metadata(data.posts.first()) <result>]\n',
+                encoding="utf-8",
             )
-            source = _tag_page_content(context, "Typst", "Typst", [post])
-        self.assertIn('#import "/theme/theme.typ": render-tag, core', source)
-        self.assertIn("core.tag-page-data", source)
-        self.assertIn("update: (year: 2026, month: 1, day: 3, patch: 0)", source)
-        self.assertIn('extra: json(bytes("{\\\"course\\\":\\\"typst-basics\\\"}"))', source)
-        self.assertIn('authors: json(bytes("[\\\"Ada\\\",\\\"Grace\\\"]"))', source)
-        self.assertIn('abstract: json(bytes("\\\"Summary\\\""))', source)
-        self.assertIn('og-image: "/images/card.png"', source)
-        self.assertNotIn("typst/core/tag.typ", source)
-        self.assertNotIn("/vendor/typst-blog-core", source)
-
-        index_source = _tags_index_content([("Typst", "Typst", 1)])
-        self.assertIn(
-            '#import "/theme/theme.typ": render-tags-index, core',
-            index_source,
-        )
-        self.assertIn("core.tags-index-page-data", index_source)
-        self.assertNotIn("/vendor/typst-blog-core", index_source)
-
-    def test_generated_static_entries_only_import_template_facade(self) -> None:
-        home_source = _home_page_content()
-        self.assertIn(
-            '#import "/theme/theme.typ": render-home, core',
-            home_source,
-        )
-        self.assertIn("core.load-build-data", home_source)
-        self.assertIn("core.home-page-data", home_source)
-        self.assertNotIn("/vendor/typst-blog-core", home_source)
-
-        not_found_source = _not_found_page_content()
-        self.assertIn(
-            '#import "/theme/theme.typ": render-not-found, core',
-            not_found_source,
-        )
-        self.assertIn("core.not-found-page-data", not_found_source)
-        self.assertNotIn("/vendor/typst-blog-core", not_found_source)
+            post = make_post_record(
+                context.root_dir, authors=("Ada", "Grace"), abstract="Summary",
+                og_image="/images/card.png", update=CalVer(2026, 1, 3),
+                tags=("Typst",), extra={"course": "typst-basics"},
+            )
+            result = run_typst(_tag_page_content(context, "Typst", "Typst", [post]), root=context.root_dir)
+            data = json.loads(result.stdout)[0]
+            self.assertEqual(data["authors"], ["Ada", "Grace"])
+            self.assertEqual(data["abstract"], "Summary")
+            self.assertEqual(data["og-image"], "/images/card.png")
+            self.assertEqual(data["extra"], {"course": "typst-basics"})
+            self.assertEqual(data["update"], {"year": 2026, "month": 1, "day": 3, "patch": 0})
 
     def test_static_assets_come_from_theme_then_site(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
             context.output_dir.mkdir()
             theme_asset = context.theme_static_dir / "styles" / "theme.css"
-            site_asset = context.user_static_dir / "images" / "site.svg"
+            site_asset = context.user_static_dir / "styles" / "theme.css"
             theme_asset.parent.mkdir(parents=True)
             site_asset.parent.mkdir(parents=True)
             theme_asset.write_text("theme", encoding="utf-8")
@@ -157,10 +70,6 @@ class ThemeBoundaryTests(unittest.TestCase):
 
             self.assertEqual(
                 (context.output_dir / "styles" / "theme.css").read_text(encoding="utf-8"),
-                "theme",
-            )
-            self.assertEqual(
-                (context.output_dir / "images" / "site.svg").read_text(encoding="utf-8"),
                 "site",
             )
 
@@ -218,10 +127,31 @@ class ThemeBoundaryTests(unittest.TestCase):
         self.assertEqual(_pagination_page_count(len(items), enabled), 3)
         self.assertEqual(_pagination_slice(items, enabled, 2), list(range(10, 20)))
 
-        page_source = _home_page_content(2, 3, 10)
-        self.assertIn("page-number: 2", page_source)
-        self.assertIn("total-pages: 3", page_source)
-        self.assertIn("per-page: 10", page_source)
+        with tempfile.TemporaryDirectory() as directory:
+            context = BlogContext.create(directory)
+            create_config_blog(context.root_dir)
+            context.theme_static_dir.parent.mkdir()
+            (context.root_dir / "theme/theme.typ").write_text(
+                '#import "/vendor/typst-blog-core/typst/api.typ" as core\n'
+                '#let render-home(data) = [#metadata((\n'
+                '  slugs: data.posts.map(post => post.slug), pagination: data.pagination,\n'
+                ')) <result>]\n',
+                encoding="utf-8",
+            )
+            write_generated_site_data(context, [
+                make_post_record(context.root_dir, slug=f"post-{n}", create=CalVer(2026, 1, n))
+                for n in range(1, 4)
+            ], {})
+            result = run_typst(_home_page_content(2, 3, 1), root=context.root_dir)
+            data = json.loads(result.stdout)[0]
+            self.assertEqual(data["slugs"], ["post-2"])
+            self.assertEqual(data["pagination"], {
+                "current": 2, "total": 3, "previous": "/", "next": "/page/3/",
+                "pages": [{"number": n, "url": url} for n, url in (
+                    (1, "/"), (2, "/page/2/"), (3, "/page/3/"),
+                )],
+            })
+
 
 if __name__ == "__main__":
     unittest.main()

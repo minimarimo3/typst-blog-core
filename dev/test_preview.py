@@ -45,7 +45,7 @@ class PreviewTests(unittest.TestCase):
             self.assertNotIn("posts/ignored.mp4", snapshot)
             self.assertNotIn(".build/typst/site-data.typ", snapshot)
 
-    def test_initial_build_includes_drafts(self) -> None:
+    def test_preview_starts_hook_watcher_and_server(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             server = Mock()
             server.server_address = ("127.0.0.1", 8000)

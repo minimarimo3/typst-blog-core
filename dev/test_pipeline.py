@@ -29,6 +29,7 @@ def make_post(root: Path):
         root,
         source_file=source,
         extra={"course": "typst-basics"},
+        authors=("Ada",), abstract="Summary", og_image="/images/card.png",
     )
 
 
@@ -109,7 +110,7 @@ class PipelineConfigurationTests(unittest.TestCase):
 
 
 class PipelineExecutionTests(unittest.TestCase):
-    def test_outputs_run_before_html_and_are_exposed_as_theme_data(self) -> None:
+    def test_post_output_writes_file_and_exposes_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
             post = make_post(context.root_dir)
@@ -118,6 +119,9 @@ class PipelineExecutionTests(unittest.TestCase):
             def build_pdf(task) -> None:
                 self.assertEqual(task.post.slug, "hello")
                 self.assertEqual(task.post.extra["course"], "typst-basics")
+                self.assertEqual(task.post.authors, ("Ada",))
+                self.assertEqual(task.post.abstract, "Summary")
+                self.assertEqual(task.post.og_image, "/images/card.png")
                 task.destination.write_text("PDF", encoding="utf-8")
 
             pipeline.post_output(
@@ -147,32 +151,6 @@ class PipelineExecutionTests(unittest.TestCase):
                 },
             )
 
-    def test_pipeline_receives_complete_post_record(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            context = BlogContext.create(directory)
-            post = make_post_record(
-                context.root_dir,
-                authors=("Ada",),
-                abstract="Summary",
-                og_image="/images/card.png",
-            )
-            pipeline = Pipeline()
-            pipeline.post_output(
-                id="text",
-                filename="record.txt",
-                label="Record",
-                media_type="text/plain",
-                build=lambda task: None,
-            )
-
-            post_outputs, _ = pipeline.plan_outputs(context, [post], "build", set())
-            pipeline_post = post_outputs[post.slug][0].post
-
-            self.assertIs(pipeline_post, post)
-            self.assertEqual(pipeline_post.authors, ("Ada",))
-            self.assertEqual(pipeline_post.abstract, "Summary")
-            self.assertEqual(pipeline_post.og_image, "/images/card.png")
-
     def test_preview_only_runs_hooks_that_opt_in(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
@@ -201,7 +179,7 @@ class PipelineExecutionTests(unittest.TestCase):
 
             self.assertEqual(calls, ["/", "preview"])
 
-    def test_preview_start_runs_once_when_explicitly_invoked(self) -> None:
+    def test_preview_start_receives_preview_build_context(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = BlogContext.create(directory)
             pipeline = Pipeline()

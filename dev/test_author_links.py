@@ -1,55 +1,16 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import tempfile
 import unittest
-from pathlib import Path
+
+from typst_fixture import run_typst, site_source
 
 
-CORE_DIR = Path(__file__).resolve().parents[1]
-DEV_DIR = Path(__file__).resolve().parent
-
-
-def evaluate_author(author: str, *, expect_success: bool = True) -> subprocess.CompletedProcess[str]:
-    source = f'''#import "../typst/core/site-impl.typ": _site
-#let site = _site(
-  title: "Test",
-  description: "Test site",
-  base_url: "https://example.com",
-  language: "en",
-  asset_extensions: (".png",),
-  fonts: (
-    main: (pdf: "Noto Serif CJK JP", web: none),
-    code: (pdf: "Fira Code", web: none),
-  ),
-  author: {author},
-)
-#metadata(site.author.links) <result>
-'''
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".typ", dir=DEV_DIR, encoding="utf-8"
-    ) as source_file:
-        source_file.write(source)
-        source_file.flush()
-        result = subprocess.run(
-            [
-                "typst",
-                "eval",
-                "query(<result>).map(it => it.value)",
-                "--in",
-                source_file.name,
-                "--root",
-                str(CORE_DIR),
-            ],
-            check=False,
-            text=True,
-            encoding="utf-8",
-            capture_output=True,
-        )
-    if expect_success and result.returncode != 0:
-        raise AssertionError(result.stderr)
-    return result
+def evaluate_author(author: str, *, expect_success: bool = True):
+    return run_typst(
+        site_source("#metadata(site.author.links) <result>", author=author),
+        expect_success=expect_success,
+    )
 
 
 class AuthorLinkTests(unittest.TestCase):

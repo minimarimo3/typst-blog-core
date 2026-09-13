@@ -24,6 +24,7 @@ def create_ui_blog(root: Path) -> None:
 #let calver = core.calver
 ''',
         "theme/theme.typ": '''#import "/vendor/typst-blog-core/typst/api.typ" as core
+#assert(core.api-version == 1, message: "Fixture requires renderer contract v1")
 #import "composition.typ": sidebar
 #let ui = core.ui
 #let render-article(data) = ui.article(data,
@@ -65,6 +66,7 @@ def create_ui_blog(root: Path) -> None:
   ui.toc()
   ui.search()
   ui.author()
+  ui.about()
 })
 ''',
         "theme/static/color-schemes/test.css": ":root { --accent-color: rgb(12, 34, 56); }\n",
