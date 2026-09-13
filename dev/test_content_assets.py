@@ -9,7 +9,11 @@ from pathlib import Path
 CORE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CORE_DIR))
 
-from typst_blog_core.builder import copy_content_assets, reserved_output_paths  # noqa: E402
+from typst_blog_core.builder import (  # noqa: E402
+    copy_content_assets,
+    reserved_output_paths,
+    validate_content_asset_output_paths,
+)
 from typst_blog_core.context import BlogContext  # noqa: E402
 from typst_blog_core.metadata import load_site_config  # noqa: E402
 from post_factory import make_post_record  # noqa: E402
@@ -84,6 +88,37 @@ class ContentAssetTests(unittest.TestCase):
             self.assertIn("post/audio.mp3", paths)
             self.assertNotIn("page/2/index.html", paths)
             self.assertNotIn("post/ignored.bin", paths)
+
+    def test_rejects_html_asset_that_would_overwrite_generated_page(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_dir = root / "post"
+            source_dir.mkdir()
+            source_file = source_dir / "index.typ"
+            source_file.write_text("post", encoding="utf-8")
+            conflicting_asset = source_dir / "index.HTML"
+            conflicting_asset.write_text("source asset", encoding="utf-8")
+            content = {
+                "source_dir": source_dir,
+                "source_file": source_file,
+            }
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "conflicts with generated index.html",
+            ):
+                validate_content_asset_output_paths(
+                    [content],
+                    frozenset({".html"}),
+                )
+
+            output_dir = root / "public" / "post"
+            output_dir.mkdir(parents=True)
+            generated = output_dir / "index.html"
+            generated.write_text("generated page", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                copy_content_assets(content, output_dir, frozenset({".html"}))
+            self.assertEqual(generated.read_text(encoding="utf-8"), "generated page")
 
 
 if __name__ == "__main__":

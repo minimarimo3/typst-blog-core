@@ -68,6 +68,7 @@ def copy_content_assets(
     output_dir: Path,
     asset_extensions: frozenset[str],
 ) -> None:
+    validate_content_asset_output_paths([content], asset_extensions)
     source_dir = (
         content.source_dir if isinstance(content, PostRecord) else content["source_dir"]
     )
@@ -82,6 +83,30 @@ def copy_content_assets(
         destination = output_dir / asset.relative_to(source_dir)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(asset, destination)
+
+
+def validate_content_asset_output_paths(
+    content: list[dict | PostRecord],
+    asset_extensions: frozenset[str],
+) -> None:
+    """Reject source assets that would overwrite generated content HTML."""
+    for item in content:
+        source_dir = (
+            item.source_dir if isinstance(item, PostRecord) else item["source_dir"]
+        )
+        source_file = (
+            item.source_file if isinstance(item, PostRecord) else item["source_file"]
+        )
+        for asset in source_dir.rglob("*"):
+            if (
+                asset.is_file()
+                and asset != source_file
+                and asset.suffix.lower() in asset_extensions
+                and asset.relative_to(source_dir).as_posix().casefold() == "index.html"
+            ):
+                raise ValueError(
+                    f"content asset {asset} conflicts with generated index.html"
+                )
 
 
 def build_post(
@@ -620,6 +645,10 @@ def prepare_build(
     print(f"Found {len(posts)} posts ({published_count} published).")
     active_posts = posts if include_drafts else [post for post in posts if not post.draft]
     active_pages = pages if include_drafts else [page for page in pages if not page["draft"]]
+    validate_content_asset_output_paths(
+        [*active_posts, *active_pages],
+        asset_extensions,
+    )
     pipeline = load_pipeline(context)
     post_outputs, site_outputs = pipeline.plan_outputs(
         context,
