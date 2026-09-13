@@ -17,6 +17,7 @@ export function initResponsiveToc() {
     }
 
     inlineSlot.append(toc);
+    if (details) details.open = false;
     toc.dataset.tocPlacement = "inline";
   };
 
