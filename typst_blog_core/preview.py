@@ -16,6 +16,7 @@ from .builder import (
     build_prepared,
     prepare_build,
     run_preview_start,
+    validate_core_asset_namespace,
 )
 from .context import BlogContext, ROOT_STATIC_FILES
 from .metadata import PostRecord, validate_extension_assets, validate_post_output_routes
@@ -145,6 +146,8 @@ def _changed_paths(
 
 def _static_output_path(relative: Path) -> Path | None:
     parts = relative.parts
+    if parts[:4] == ("vendor", "typst-blog-core", "static", "_core"):
+        return Path(*parts[3:])
     if parts[:2] == ("theme", "static"):
         return Path(*parts[2:])
     if parts[:1] == ("static",):
@@ -162,6 +165,7 @@ def _preferred_static_source(context: BlogContext, output_path: Path) -> Path | 
         (
             context.user_static_dir / output_path,
             context.theme_static_dir / output_path,
+            context.core_dir / "static" / output_path,
         )
     )
     return next((path for path in candidates if path.is_file()), None)
@@ -178,6 +182,7 @@ def _remove_empty_parents(path: Path, stop: Path) -> None:
 
 
 def _sync_static_changes(prepared: PreparedBuild, changed: set[Path]) -> None:
+    validate_core_asset_namespace(prepared.context)
     context = prepared.context
     validate_extension_assets(context)
     content = [*prepared.posts, *prepared.pages]

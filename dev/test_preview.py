@@ -153,6 +153,7 @@ class PreviewTests(unittest.TestCase):
                 output_dir=root / "public",
                 user_static_dir=root / "static",
                 theme_static_dir=root / "theme" / "static",
+                core_dir=root / "vendor" / "typst-blog-core",
             )
             prepared = SimpleNamespace(context=context, posts=[], pages=[])
             with (

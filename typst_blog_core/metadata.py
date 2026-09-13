@@ -32,6 +32,7 @@ EXCLUDED_DIRS = {
 CALVER_TEXT_RE = re.compile(r"(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})(?:\.(\d+))?")
 TAG_PLAIN_SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
 GENERATED_ROUTE_NAMES = {
+    "_core",
     "404.html",
     "color-schemes",
     "feed.xml",

@@ -148,12 +148,22 @@ def copy_static_dir(context: BlogContext, source_dir: Path) -> None:
 
 
 def copy_static_assets(context: BlogContext) -> None:
+    validate_core_asset_namespace(context)
+    copy_static_dir(context, context.core_dir / "static")
     copy_static_dir(context, context.theme_static_dir)
     copy_static_dir(context, context.user_static_dir)
     for filename in ROOT_STATIC_FILES:
         source = context.root_dir / filename
         if source.is_file():
             shutil.copy2(source, context.output_dir / filename)
+
+
+def validate_core_asset_namespace(context: BlogContext) -> None:
+    for source_dir in (context.theme_static_dir, context.user_static_dir):
+        if source_dir.is_dir() and any(
+            child.name.casefold() == "_core" for child in source_dir.iterdir()
+        ):
+            raise ValueError(f"{source_dir}/_core is reserved for core assets")
 
 
 def generate_alias_redirects(
@@ -231,7 +241,11 @@ def reserved_output_paths(
             ):
                 relative = asset.relative_to(page["source_dir"]).as_posix()
                 paths.add(f"{page['route_path']}/{relative}")
-    for source_dir in (context.theme_static_dir, context.user_static_dir):
+    for source_dir in (
+        context.core_dir / "static",
+        context.theme_static_dir,
+        context.user_static_dir,
+    ):
         if source_dir.is_dir():
             paths.update(
                 asset.relative_to(source_dir).as_posix()
@@ -591,6 +605,7 @@ def prepare_build(
     context = BlogContext.create(root_dir, base_path)
     site = load_site_config(context)
     asset_extensions = frozenset(site["asset_extensions"])
+    validate_core_asset_namespace(context)
     validate_extension_assets(context)
     posts_dir = resolve_posts_dir(context, site)
     posts = collect_posts(context, posts_dir)

@@ -73,3 +73,5 @@
 #let extension-asset-url = core-extension-asset-url
 #let google-font-families = core-google-font-families
 #let font-css-lines = core-font-css-lines
+
+#import "ui.typ" as ui
