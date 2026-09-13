@@ -126,6 +126,57 @@ class ComponentIntegrationTests(unittest.TestCase):
         self.assertFalse(dom.matching(attr="data-pagefind-body"))
         self.assertTrue(any(a.get("name") == "robots" and a.get("content") == "noindex, nofollow" for a in dom.matching(tag="meta")))
 
+    def test_theme_can_override_existing_translation_and_add_language(self):
+        site = self.root / "site.typ"
+        source = site.read_text()
+        site.write_text(source.replace(
+            'language: "en", update_policy: "manual", posts_dir: "posts",',
+            'language: "fr", update_policy: "manual", posts_dir: "posts",',
+        ).replace(
+            'theme: theme-config(color_scheme: "test"),',
+            'theme: theme-config(color_scheme: "test", translations: (fr: (back_home: "Retour personnalisé", toc: "Sommaire"), "zh-SG": (toc: "目录"), "zh-Hani-TW": (toc: "目錄"))),',
+        ))
+        self.build()
+        article = self.read("demo/index.html")
+        self.assertIn("Sommaire", article)
+        self.assertIn("執筆者", article)
+        self.assertIn("Retour personnalisé", self.read("404.html"))
+
+    def test_theme_can_override_existing_translation(self):
+        site = self.root / "site.typ"
+        site.write_text(site.read_text().replace(
+            'theme: theme-config(color_scheme: "test"),',
+            'theme: theme-config(color_scheme: "test", translations: (en: (back_home: "Custom home"))),',
+        ))
+        self.build()
+        self.assertIn("Custom home", self.read("404.html"))
+
+    def test_unknown_translation_key_is_rejected(self):
+        site = self.root / "site.typ"
+        site.write_text(site.read_text().replace(
+            'theme: theme-config(color_scheme: "test"),',
+            'theme: theme-config(color_scheme: "test", translations: (en: (typo_key: "Typo"))),',
+        ))
+        result = subprocess.run(
+            [sys.executable, str(CORE_DIR / "command.py"), "build"],
+            cwd=self.root, capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("未知の翻訳キー", result.stdout + result.stderr)
+
+    def test_non_normalized_translation_language_is_rejected(self):
+        site = self.root / "site.typ"
+        site.write_text(site.read_text().replace(
+            'theme: theme-config(color_scheme: "test"),',
+            'theme: theme-config(color_scheme: "test", translations: (FR: (toc: "Sommaire"))),',
+        ))
+        result = subprocess.run(
+            [sys.executable, str(CORE_DIR / "command.py"), "build"],
+            cwd=self.root, capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("BCP 47", result.stdout + result.stderr)
+
 
 class CoreAssetTests(unittest.TestCase):
     def test_namespace_cannot_be_replaced_by_site_assets_or_content(self):

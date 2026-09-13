@@ -1,6 +1,6 @@
 #import "/site.typ": site
 
-#let _translations = (
+#let _default-translations = (
   ja: (
     skip_to_main_content: "本文へ移動",
     site_navigation: "サイトナビゲーション",
@@ -250,12 +250,59 @@
 
 // Falls back to Japanese for unrecognized language codes.
 #import "../core/language.typ": translation-language
+#let _translation-overrides = site.at("theme", default: (:)).at("translations", default: (:))
+#assert(type(_translation-overrides) == dictionary, message: "theme.translations: 辞書が必要です")
+
+#let _translation-keys = _default-translations.ja.keys()
+#let _translations = _default-translations
+#for (language, entries) in _translation-overrides {
+  let ascii-letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  let language-parts = language.split("-")
+  let is-letters = value => value.clusters().all(character => ascii-letters.contains(character))
+  let valid-language = (language-parts.len() in (1, 2, 3)
+    and language-parts.first().len() in (2, 3)
+    and is-letters(language-parts.first())
+    and language-parts.first() == lower(language-parts.first()))
+  if valid-language and language-parts.len() >= 2 {
+    let second = language-parts.at(1)
+    valid-language = is-letters(second) and (
+      (second.len() == 2 and second == upper(second))
+        or (second.len() == 4 and second == upper(second.slice(0, 1)) + lower(second.slice(1)))
+    )
+  }
+  if valid-language and language-parts.len() == 3 {
+    let script = language-parts.at(1)
+    let region = language-parts.at(2)
+    valid-language = (script.len() == 4
+      and region.len() == 2
+      and is-letters(region)
+      and region == upper(region))
+  }
+  assert(
+    valid-language,
+    message: "theme.translations." + language + ": fr, pt-BR, zh-Hani-TW のような正規化済みBCP 47言語タグが必要です",
+  )
+  assert(type(entries) == dictionary, message: "theme.translations." + language + ": 辞書が必要です")
+  assert(
+    entries.keys().all(key => key in _translation-keys),
+    message: "theme.translations." + language + ": 未知の翻訳キーがあります",
+  )
+  for (key, value) in entries {
+    assert(
+      type(value) == str and value.trim() != "",
+      message: "theme.translations." + language + "." + key + ": 空でない文字列が必要です",
+    )
+  }
+  let base = _default-translations.at(language, default: _default-translations.ja)
+  _translations.insert(language, base + entries)
+}
+
 #let i18n = _translations.at(translation-language(site.at("language", default: (lang: "en", region: none, script: auto)), _translations))
 
 // Renders a coverage table comparing each non-Japanese language against Japanese.
 // Use in a paged document (e.g. typst compile docs/i18n-check.typ).
 #let i18n-coverage() = {
-  let ja = _translations.ja
+  let ja = _default-translations.ja
   let keys = ja.keys()
   let other-langs = _translations.keys().filter(l => l != "ja")
 
@@ -265,7 +312,13 @@
   }
 
   for lang in other-langs {
-    let t = _translations.at(lang)
+    // Built-in languages are complete. For added languages, show which keys
+    // are supplied directly and which ones use the Japanese fallback.
+    let t = if lang in _default-translations {
+      _default-translations.at(lang) + _translation-overrides.at(lang, default: (:))
+    } else {
+      _translation-overrides.at(lang, default: (:))
+    }
     let done = keys.filter(k => k in t).len()
     let total = keys.len()
 
@@ -283,7 +336,7 @@
         (
           raw(key),
           ja-val,
-          if lang-val != none { lang-val } else { [—] },
+          if lang-val != none { lang-val } else { [#ja-val (日本語へフォールバック)] },
           if lang-val != none {
             text(fill: green.darken(20%))[✓]
           } else {

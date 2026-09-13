@@ -3,6 +3,7 @@
   color_scheme: "dark",
   cloudflare_token: none,
   navigation: (),
+  translations: (:),
   article_actions: (
     share: (x: true, misskey: true, copy: true),
     feedback: (google_form_url: none, entry_id: none),
@@ -49,6 +50,8 @@
     }
   }
 
+  assert(type(translations) == dictionary, message: "theme.translations: 辞書が必要です")
+
   assert(type(article_actions) == dictionary, message: "theme.article_actions: 辞書が必要です")
   assert(
     article_actions.keys().all(key => key in ("share", "feedback")),
@@ -79,6 +82,7 @@
     color_scheme: color_scheme,
     cloudflare_token: cloudflare_token,
     navigation: navigation,
+    translations: translations,
     article_actions: (
       share: (
         x: share.at("x", default: false),
