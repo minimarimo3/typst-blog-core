@@ -89,7 +89,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             stderr.getvalue(),
-            "Warning: Typst version mismatch: expected 0.15.0 "
+            "Warning: Typst version mismatch: expected 0.15.1 "
             "(typst-version), but found 0.14.2.\n",
         )
 
@@ -97,7 +97,7 @@ class CliTests(unittest.TestCase):
         completed = subprocess.CompletedProcess(
             ["typst", "--version"],
             0,
-            stdout="typst 0.15.0 (test build)\n",
+            stdout="typst 0.15.1 (test build)\n",
             stderr="",
         )
         stderr = io.StringIO()
