@@ -145,7 +145,9 @@ a.tag:hover {
 }
 
 .code-block-wrapper:hover .code-copy-btn,
-.code-copy-btn:focus-visible {
+.code-copy-btn:focus-visible,
+.table-block-wrapper:hover .table-copy-btn,
+.table-block-wrapper:focus-within .table-copy-btn {
   opacity: 1;
 }
 
@@ -257,18 +259,16 @@ figcaption {
 }
 
 .table-block-wrapper {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
   margin: 2em 0;
 }
 
-.table-copy-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 6px;
-}
-
-.table-copy-btn {
-  position: static;
-  opacity: 1;
+@media (hover: none) {
+  .table-copy-btn {
+    opacity: 1;
+  }
 }
 
 .table-block-wrapper > .table-scroll {

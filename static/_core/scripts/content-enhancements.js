@@ -99,10 +99,8 @@ export function initTableCopy() {
     const wrapper = document.createElement("div");
     wrapper.className = "table-block-wrapper";
     scroll.parentNode.insertBefore(wrapper, scroll);
-    const toolbar = document.createElement("div");
-    toolbar.className = "table-copy-toolbar";
-    wrapper.append(toolbar, scroll);
-    copyButton(toolbar, table, copyLabels().table, () => tableToTsv(table), "table-copy-btn");
+    wrapper.appendChild(scroll);
+    copyButton(wrapper, table, copyLabels().table, () => tableToTsv(table), "table-copy-btn");
   });
 }
 
