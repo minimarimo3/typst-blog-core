@@ -124,7 +124,8 @@ a.tag:hover {
   position: relative;
 }
 
-.code-copy-btn {
+.code-copy-btn,
+.table-copy-btn {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -148,12 +149,14 @@ a.tag:hover {
   opacity: 1;
 }
 
-.code-copy-btn:hover {
+.code-copy-btn:hover,
+.table-copy-btn:hover {
   background-color: var(--card-bg);
   color: var(--text-color);
 }
 
-.code-copy-btn.copied {
+.code-copy-btn.copied,
+.table-copy-btn.copied {
   opacity: 1;
   color: var(--accent-color);
   border-color: var(--accent-color);
@@ -251,6 +254,40 @@ figcaption {
   margin-top: 0.5em;
   font-size: 0.9em;
   color: var(--text-muted);
+}
+
+.table-block-wrapper {
+  margin: 2em 0;
+}
+
+.table-copy-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.table-copy-btn {
+  position: static;
+  opacity: 1;
+}
+
+.table-block-wrapper > .table-scroll {
+  margin: 0;
+}
+
+.table-scroll {
+  max-width: 100%;
+  margin: 2em 0;
+  overflow-x: auto;
+}
+
+.table-scroll:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.table-scroll > table {
+  margin: 0 auto;
 }
 
 table {

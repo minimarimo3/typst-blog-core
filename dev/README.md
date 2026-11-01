@@ -5,6 +5,7 @@ in `typst-version`:
 
 ```sh
 python3 -m unittest discover -s vendor/typst-blog-core/dev -p 'test_*.py' -v
+node --test vendor/typst-blog-core/dev/test_content_enhancements.mjs
 python3 command.py build
 ```
 

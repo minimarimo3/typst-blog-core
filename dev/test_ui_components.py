@@ -78,6 +78,40 @@ class ComponentIntegrationTests(unittest.TestCase):
         self.assertEqual(self.read("styles/theme.css"), (self.root / "theme/static/styles/theme.css").read_text())
         self.assertEqual(self.read("third-party-licenses.txt"), (CORE_DIR / "static/third-party-licenses.txt").read_text())
 
+    def test_tables_keep_native_structure_inside_keyboard_scroll_regions(self):
+        table = """
+#figure(
+  table(columns: 3,
+    table.header([Day], [Morning], [Night]),
+    table.cell(rowspan: 2)[Monday], [Hello], [Good night],
+    table.cell(colspan: 2)[Any time],
+  ),
+  caption: [Greeting schedule],
+)
+"""
+        for path in ("posts/demo/index.typ", "pages/about/index.typ"):
+            page = self.root / path
+            page.write_text(page.read_text() + table)
+        self.build()
+        for path in ("demo/index.html", "about/index.html"):
+            with self.subTest(path=path):
+                source = self.read(path)
+                dom = Elements(source)
+                regions = dom.matching(cls="table-scroll")
+                self.assertEqual(len(regions), len(dom.matching(tag="table")))
+                self.assertTrue(regions)
+                for region in regions:
+                    self.assertEqual(region["tabindex"], "0")
+                    self.assertEqual(region["role"], "region")
+                    self.assertEqual(region["aria-label"], "Table (scroll horizontally)")
+                self.assertTrue(dom.matching(tag="thead"))
+                self.assertEqual(len(dom.matching(tag="th")), 3)
+                self.assertTrue(any(a.get("rowspan") == "2" for a in dom.matching(tag="td")))
+                self.assertTrue(any(a.get("colspan") == "2" for a in dom.matching(tag="td")))
+                self.assertIn("Greeting schedule", source)
+                self.assertRegex(source, r'<div class="table-scroll"[^>]*><table>')
+                self.assertRegex(source, r'</table></div>\s*</figure>')
+
     def test_composition_order_and_direct_html_extension_are_preserved(self):
         composition = self.root / "theme/composition.typ"
         original = composition.read_text()

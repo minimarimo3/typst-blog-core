@@ -12,6 +12,13 @@
   show heading: set text(font: heading-font)
   show figure.where(kind: table): set figure.caption(position: top)
   show figure.where(kind: raw): set figure(supplement: i18n.code)
+  // Keep native table semantics while containing wide tables without JavaScript.
+  show table: it => html.elem("div", attrs: (
+    class: "table-scroll",
+    tabindex: "0",
+    role: "region",
+    "aria-label": i18n.scrollable_table,
+  ), it)
   set quote(block: true)
   if math-font != none {
     show math.equation: set text(font: math-font)
